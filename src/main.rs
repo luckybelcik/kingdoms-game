@@ -1,14 +1,13 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(feature = "openxr")]
-    {
-        app_core::run_xr()
-    }
+use crate::client::rendering::app::App;
 
-    #[cfg(not(feature = "openxr"))]
+pub mod client;
+pub mod shared;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let event_loop = winit::event_loop::EventLoop::builder().build()?;
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-        let mut app = app_core::App::default();
+        let mut app = App::default();
         event_loop.run_app(&mut app)?;
         Ok(())
     }

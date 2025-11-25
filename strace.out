@@ -1,0 +1,54 @@
+19197 16:41:44.969293 execve("/home/luckybelcik/.cargo/bin/cargo", ["cargo", "run"], 0x7ffd292499e0 /* 78 vars */) = 0
+19197 16:41:45.034879 execve("/home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin/cargo", ["/home/luckybelcik/.rustup/toolch"..., "run"], 0x55f320d80d30 /* 83 vars */ <unfinished ...>
+19204 16:41:45.035252 +++ exited with 0 +++
+19205 16:41:45.035273 +++ exited with 0 +++
+19203 16:41:45.035285 +++ exited with 0 +++
+19201 16:41:45.035295 +++ exited with 0 +++
+19202 16:41:45.035306 +++ exited with 0 +++
+19200 16:41:45.035317 +++ exited with 0 +++
+19199 16:41:45.035331 +++ exited with 0 +++
+19198 16:41:45.035342 +++ exited with 0 +++
+19197 16:41:45.038157 <... execve resumed>) = 0
+19206 16:41:45.836292 +++ exited with 0 +++
+19197 16:41:45.853488 execve("target/debug/app", ["target/debug/app"], 0x5585dd891110 /* 102 vars */) = 0
+19230 16:41:46.284961 +++ exited with 0 +++
+19229 16:41:46.285588 +++ exited with 0 +++
+19228 16:41:46.286481 +++ exited with 0 +++
+19225 16:41:46.287487 +++ exited with 0 +++
+19226 16:41:46.288211 +++ exited with 0 +++
+19227 16:41:46.288957 +++ exited with 0 +++
+19223 16:41:46.289347 +++ exited with 0 +++
+19224 16:41:46.289594 +++ exited with 0 +++
+19222 16:41:46.289974 +++ exited with 0 +++
+19211 16:41:50.772779 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:50.822597 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19212 16:41:50.857942 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:50.893529 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:50.943798 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19212 16:41:51.052346 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.098827 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.126699 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.215118 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19211 16:41:51.277517 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.342327 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.409599 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.457730 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.538420 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19197 16:41:51.850711 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+19240 16:42:40.172234 +++ exited with 0 +++
+19241 16:42:40.172944 +++ exited with 0 +++
+19239 16:42:40.176011 +++ exited with 0 +++
+19238 16:42:40.177109 +++ exited with 0 +++
+19237 16:42:40.178164 +++ exited with 0 +++
+19234 16:42:40.179720 +++ exited with 0 +++
+19235 16:42:40.180925 +++ exited with 0 +++
+19236 16:42:40.185297 +++ exited with 0 +++
+19232 16:42:40.186157 +++ exited with 0 +++
+19233 16:42:40.186494 +++ exited with 0 +++
+19231 16:42:40.187085 +++ exited with 0 +++
+19221 16:42:40.187561 +++ exited with 0 +++
+19197 16:42:40.190493 --- SIGSEGV {si_signo=SIGSEGV, si_code=SEGV_MAPERR, si_addr=0x164} ---
+19197 16:42:40.190680 --- SIGSEGV {si_signo=SIGSEGV, si_code=SEGV_MAPERR, si_addr=0x164} ---
+19212 16:42:41.168177 +++ killed by SIGSEGV (core dumped) +++
+19211 16:42:41.178892 +++ killed by SIGSEGV (core dumped) +++
+19197 16:42:41.178974 +++ killed by SIGSEGV (core dumped) +++

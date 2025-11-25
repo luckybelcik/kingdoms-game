@@ -1,6 +1,0 @@
-[package]
-name = "app"
-
-[android]
-min_sdk_version = 24
-target_sdk_version = 34
