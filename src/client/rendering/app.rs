@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::sync::Mutex;
 use std::{sync::Arc};
 use std::f32::consts::PI;
 use web_time::{Instant};
@@ -10,23 +10,17 @@ use winit::{keyboard::KeyCode,
     window::{Theme, Window},
 };
 
-use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}, render::Vertex}};
+use crate::client::rendering::appinfo::AppInfo;
+use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
 #[derive(Default)]
 pub struct App {
     window: Option<Arc<Window>>,
     pub renderer: Option<Renderer>,
     gui_state: Option<egui_winit::State>,
-    last_render_time: Option<Instant>,
-    last_size: (u32, u32),
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub chunks: Vec<Chunk>,
-    chunk_updates: u64,
-    pub camera_pos: nalgebra_glm::Vec3,
-    pub camera_rot: nalgebra_glm::Vec3,
-    delta_history: VecDeque<u16>,
-    avg_fps_history: VecDeque<u16>,
-    tick: u128,
+    pub appinfo: Option<Arc<Mutex<AppInfo>>>,
 }
 
 impl ApplicationHandler for App {
@@ -49,9 +43,11 @@ impl ApplicationHandler for App {
         }
         let gui_context = egui::Context::default();
 
+        let mut app_info = AppInfo::default();
+
         {
             let inner_size = window_handle.inner_size();
-            self.last_size = (inner_size.width, inner_size.height);
+            app_info.last_size = (inner_size.width, inner_size.height);
         }
 
         let viewport_id = gui_context.viewport_id();
@@ -78,7 +74,7 @@ impl ApplicationHandler for App {
         }
 
         self.gui_state = Some(gui_state);
-        self.last_render_time = Some(Instant::now());
+        app_info.last_render_time = Some(Instant::now());
 
         let mut chunks = Vec::new();
         if let Some(renderer) = &self.renderer {
@@ -87,7 +83,7 @@ impl ApplicationHandler for App {
                     let mut chunk = Chunk::new_full(i, 0, j);
                     // if it returns true (which it does when the mesh was regenerated) then we increment the chunk update counter
                     if chunk.generate_mesh(&renderer.get_gpu().device) {
-                        self.chunk_updates += 1;
+                        app_info.chunk_updates += 1;
                     }
                     chunks.push(chunk);
                 }
@@ -96,11 +92,11 @@ impl ApplicationHandler for App {
 
         self.chunks = chunks;
 
-        self.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);
-        self.camera_rot = nalgebra_glm::vec3(0.0, 0.0, 0.0);
-    }
+        app_info.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);
+        app_info.camera_rot = nalgebra_glm::vec3(0.0, 0.0, 0.0);
 
-    
+        self.appinfo = Some(Arc::new(Mutex::new(app_info)));
+    }
 
     fn window_event(
         &mut self,
@@ -108,50 +104,57 @@ impl ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        self.tick += 1;
+        let mut app_info = self.appinfo.as_mut().expect("Failed to get app info").lock().unwrap();
 
-        let triangle_count = self.get_triangles_sent();
-        let total_chunk_vram = self.get_total_chunk_memory();
-        let single_chunk_vram = self.get_total_chunk_memory() / self.chunks.len() as u64;
-        let chunk_count = self.chunks.len();
-        let chunk_update_count = self.chunk_updates;
+        app_info.tick += 1;
 
-        let total: f32 = (self.delta_history.iter().sum::<u16>()) as f32;
-        let avg_delta_time = total / (self.delta_history.len() as f32);
+        let total: f32 = (app_info.delta_history.iter().sum::<u16>()) as f32;
+        let avg_delta_time = total / (app_info.delta_history.len() as f32);
 
-        if self.tick % 10 == 0 {
+        if app_info.tick % 10 == 0 {
             let now = Instant::now();
-            if let Some(last) = self.last_render_time {
+            if let Some(last) = app_info.last_render_time {
                 let delta_time = now - last;
-                self.delta_history.push_back(delta_time.as_millis() as u16);
+                app_info.delta_history.push_back(delta_time.as_millis() as u16);
 
-                if self.delta_history.len() > 512 {
-                    self.delta_history.pop_front();
+                if app_info.delta_history.len() > 512 {
+                    app_info.delta_history.pop_front();
                 }
 
                 if avg_delta_time != 0.0 {
-                    self.avg_fps_history.push_back((1000.0 / avg_delta_time) as u16);
+                    app_info.avg_fps_history.push_back((1000.0 / avg_delta_time) as u16);
 
-                    if self.avg_fps_history.len() > 128 {
-                        self.avg_fps_history.pop_front();
+                    if app_info.avg_fps_history.len() > 128 {
+                        app_info.avg_fps_history.pop_front();
                     }
                 }
             }
         }
 
+        app_info.chunk_count = self.chunks.len() as u64;
+        let mut mem = 0;
+        for chunk in &self.chunks {
+            if let Some(mesh) = &chunk.mesh {
+                mem += mesh.get_instance_points().size() as u64;
+            }
+        } 
+        app_info.total_chunk_vram = mem;
+        app_info.avg_chunk_vram = app_info.total_chunk_vram / app_info.chunk_count as u64;
+
+
         let mut lowest_fps = 0;
         let mut highest_fps = 0;
 
-        if self.delta_history.len() > 0 {
-            lowest_fps = *self.avg_fps_history.iter().min().unwrap();
-            highest_fps = *self.avg_fps_history.iter().max().unwrap();
+        if !app_info.avg_fps_history.is_empty() {
+            lowest_fps = *app_info.avg_fps_history.iter().min().unwrap_or(&0);
+            highest_fps = *app_info.avg_fps_history.iter().max().unwrap_or(&0);
         }
 
         let (Some(gui_state), Some(renderer), Some(window), Some(last_render_time)) = (
             self.gui_state.as_mut(),
             self.renderer.as_mut(),
             self.window.as_ref(),
-            self.last_render_time.as_mut(),
+            app_info.last_render_time.as_mut(),
         ) else {
             return;
         };
@@ -193,7 +196,7 @@ impl ApplicationHandler for App {
 
                 log::info!("Resizing renderer surface to: ({width}, {height})");
                 renderer.resize(width, height);
-                self.last_size = (width, height);
+                app_info.last_size = (width, height);
 
                 {
                     let scale_factor = window.scale_factor() as f32;
@@ -216,174 +219,56 @@ impl ApplicationHandler for App {
 
                 // Rotation
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowUp) {
-                    self.camera_rot.x += rotation_speed;
+                    app_info.camera_rot.x += rotation_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowDown) {
-                    self.camera_rot.x -= rotation_speed;
+                    app_info.camera_rot.x -= rotation_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowLeft) {
-                    self.camera_rot.y += rotation_speed;
+                    app_info.camera_rot.y += rotation_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowRight) {
-                    self.camera_rot.y -= rotation_speed;
+                    app_info.camera_rot.y -= rotation_speed;
                 }
                 // Clamp pitch
-                self.camera_rot.x = self.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
+                app_info.camera_rot.x = app_info.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
                 // Movement
-                let (sin_y, cos_y) = self.camera_rot.y.sin_cos();
+                let (sin_y, cos_y) = app_info.camera_rot.y.sin_cos();
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyW) {
-                    self.camera_pos.x += cos_y * move_speed;
-                    self.camera_pos.z += sin_y * move_speed;
+                    app_info.camera_pos.x += cos_y * move_speed;
+                    app_info.camera_pos.z += sin_y * move_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyS) {
-                    self.camera_pos.x -= cos_y * move_speed;
-                    self.camera_pos.z -= sin_y * move_speed;
+                    app_info.camera_pos.x -= cos_y * move_speed;
+                    app_info.camera_pos.z -= sin_y * move_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyA) {
-                    self.camera_pos.x -= sin_y * move_speed;
-                    self.camera_pos.z += cos_y * move_speed;
+                    app_info.camera_pos.x -= sin_y * move_speed;
+                    app_info.camera_pos.z += cos_y * move_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyD) {
-                    self.camera_pos.x += sin_y * move_speed;
-                    self.camera_pos.z -= cos_y * move_speed;
+                    app_info.camera_pos.x += sin_y * move_speed;
+                    app_info.camera_pos.z -= cos_y * move_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::Space) {
-                    self.camera_pos.y += move_speed;
+                    app_info.camera_pos.y += move_speed;
                 }
                 if self.pressed_keys.contains(&winit::keyboard::KeyCode::ShiftLeft) {
-                    self.camera_pos.y -= move_speed;
+                    app_info.camera_pos.y -= move_speed;
                 }
 
                 let gui_input = gui_state.take_egui_input(window);
 
                 gui_state.egui_ctx().begin_pass(gui_input);
 
-                let title = "Rust/Wgpu";
-
-                {
-                    egui::TopBottomPanel::top("top").show(gui_state.egui_ctx(), |ui| {
-                        ui.horizontal(|ui| {
-                            egui::MenuBar::new().ui(ui, |ui| {
-                                ui.menu_button("File", |ui| {
-                                    if ui.button("Load").clicked() {
-                                        ui.close();
-                                    }
-                                    if ui.button("Save").clicked() {
-                                        ui.close();
-                                    }
-                                    ui.separator();
-                                    if ui.button("Import").clicked() {
-                                        ui.close();
-                                    }
-                                });
-
-                                ui.menu_button("Edit", |ui| {
-                                    if ui.button("Clear").clicked() {
-                                        ui.close();
-                                    }
-                                    if ui.button("Reset").clicked() {
-                                        ui.close();
-                                    }
-                                });
-
-                                ui.separator();
-
-                                ui.label(
-                                    egui::RichText::new(title).color(egui::Color32::LIGHT_GREEN),
-                                );
-
-                                ui.separator();
-                            });
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
-                                ui.add_space(10.0);
-                                ui.label(
-                                    egui::RichText::new("v0.1.0").color(egui::Color32::ORANGE),
-                                );
-                                ui.separator();
-                            });
-                        });
-                    });
-
-                    egui::SidePanel::left("left").show(gui_state.egui_ctx(), |ui| {
-                        ui.heading("Scene Tree");
-                    });
-
-                    egui::SidePanel::right("right").show(gui_state.egui_ctx(), |ui| {
-                        ui.heading("Performance");
-
-                        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                            let color = if delta_time.as_millis() < 12 {
-                                egui::Color32::GREEN
-                            } else if delta_time.as_millis() < 16 {
-                                egui::Color32::ORANGE
-                            } else {
-                                egui::Color32::RED
-                            };
-
-                            ui.label(
-                                egui::RichText::new(format!("delta: {:.1} ms", avg_delta_time)).color(color),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("FPS: {:.1}", 1000.0 / avg_delta_time)).color(color),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("Highest FPS: {}", highest_fps)).color(color),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("Lowest FPS: {}", lowest_fps)).color(color),
-                            );
-                        });
-
-                        ui.heading("Debug Info");
-
-                        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                            ui.label(
-                                egui::RichText::new(format!("window size: {}x {}y", self.last_size.0, self.last_size.1)).color(egui::Color32::ORANGE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("triangles sent: {}", triangle_count)).color(egui::Color32::ORANGE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("chunk vram footprint: {}", total_chunk_vram)).color(egui::Color32::ORANGE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("memory per chunk: {}", single_chunk_vram)).color(egui::Color32::ORANGE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new("warning, the memory amount above takes both vertices and indices into consideration").color(egui::Color32::GRAY).small(),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("chunks: {}", chunk_count)).color(egui::Color32::ORANGE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("chunks update count: {}", chunk_update_count)).color(egui::Color32::ORANGE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", self.camera_pos.x, self.camera_pos.y, self.camera_pos.z)).color(egui::Color32::LIGHT_BLUE),
-                            );
-
-                            ui.label(
-                                egui::RichText::new(format!("cam rot: {:.2}, {:.2}", self.camera_rot.x.to_degrees(), self.camera_rot.y.to_degrees())).color(egui::Color32::LIGHT_BLUE),
-                            );
-                        });
-                    });
-
-                    egui::TopBottomPanel::bottom("Console").show(gui_state.egui_ctx(), |ui| {
-                        ui.heading("Console");
-                    });
-                }
+                draw_ui(
+                    gui_state.egui_ctx(),
+                    avg_delta_time,
+                    highest_fps,
+                    lowest_fps,
+                    &mut app_info,
+                );
 
                 let egui_winit::egui::FullOutput {
                     textures_delta,
@@ -398,7 +283,7 @@ impl ApplicationHandler for App {
                 let paint_jobs = gui_state.egui_ctx().tessellate(shapes, pixels_per_point);
 
                 let screen_descriptor = {
-                    let (width, height) = self.last_size;
+                    let (width, height) = app_info.last_size;
                     if width == 0 || height == 0 {
                         return;
                     }
@@ -413,7 +298,7 @@ impl ApplicationHandler for App {
                     paint_jobs,
                     textures_delta,
                     &mut self.chunks,
-                    self.camera_pos, self.camera_rot,
+                    app_info.camera_pos, app_info.camera_rot,
                 );
             }
             _ => (),
@@ -423,26 +308,90 @@ impl ApplicationHandler for App {
     }
 }
 
-impl App {
-    fn get_triangles_sent(&self) -> u64 {
-        let mut triangles_sent = 0;
-        for chunk in &self.chunks {
-            if let Some(mesh) = &chunk.mesh {
-                triangles_sent += mesh.get_instance_points().size() / std::mem::size_of::<Vertex>() as u64;
+fn draw_ui(
+    ctx: &egui::Context,
+    avg_delta_time: f32,
+    highest_fps: u16,
+    lowest_fps: u16,
+    app_info: &mut AppInfo,
+) {
+    let title = "Rust/Wgpu";
+    egui::TopBottomPanel::top("top").show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Load").clicked() {
+                        ui.close();
+                    }
+                    if ui.button("Save").clicked() {
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Import").clicked() {
+                        ui.close();
+                    }
+                });
+
+                ui.menu_button("Edit", |ui| {
+                    if ui.button("Clear").clicked() {
+                        ui.close();
+                    }
+                    if ui.button("Reset").clicked() {
+                        ui.close();
+                    }
+                });
+
+                ui.separator();
+                ui.label(egui::RichText::new(title).color(egui::Color32::LIGHT_GREEN));
+                ui.separator();
+            });
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("v0.1.0").color(egui::Color32::ORANGE));
+                ui.separator();
+            });
+        });
+    });
+
+    egui::SidePanel::left("left").show(ctx, |ui| {
+        ui.heading("Scene Tree");
+    });
+
+    egui::SidePanel::right("right").show(ctx, |ui| {
+        ui.heading("Performance");
+
+        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+            let color = if avg_delta_time < 12.0 {
+                egui::Color32::GREEN
+            } else if avg_delta_time < 16.7 {
+                egui::Color32::ORANGE
+            } else {
+                egui::Color32::RED
+            };
+            ui.label(egui::RichText::new(format!("delta: {:.1} ms", avg_delta_time)).color(color));
+            if avg_delta_time > 0.0 {
+                ui.label(egui::RichText::new(format!("FPS: {:.1}", 1000.0 / avg_delta_time)).color(color));
             }
-        } 
+            ui.label(egui::RichText::new(format!("Highest FPS: {}", highest_fps)).color(color));
+            ui.label(egui::RichText::new(format!("Lowest FPS: {}", lowest_fps)).color(color));
+        });
 
-        triangles_sent
-    }
+        ui.heading("Debug Info");
 
-    fn get_total_chunk_memory(&self) -> u64 {
-        let mut mem = 0;
-        for chunk in &self.chunks {
-            if let Some(mesh) = &chunk.mesh {
-                mem += mesh.get_instance_points().size() as u64;
-            }
-        } 
+        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+            ui.label(egui::RichText::new(format!("window size: {}x {}y", app_info.last_size.0, app_info.last_size.1)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("chunk vram footprint: {}", app_info.total_chunk_vram)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("memory per chunk: {}", app_info.avg_chunk_vram)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new("warning, the memory amount above takes both vertices and indices into consideration").color(egui::Color32::GRAY).small());
+            ui.label(egui::RichText::new(format!("chunks: {}", app_info.chunk_count)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("chunks update count: {}", app_info.chunk_updates)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app_info.camera_pos.x, app_info.camera_pos.y, app_info.camera_pos.z)).color(egui::Color32::LIGHT_BLUE));
+            ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app_info.camera_rot.x.to_degrees(), app_info.camera_rot.y.to_degrees())).color(egui::Color32::LIGHT_BLUE));
+        });
+    });
 
-        mem
-    }
+    egui::TopBottomPanel::bottom("Console").show(ctx, |ui| {
+        ui.heading("Console");
+    });
 }
