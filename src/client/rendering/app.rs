@@ -82,8 +82,8 @@ impl ApplicationHandler for App {
 
         let mut chunks = Vec::new();
         if let Some(renderer) = &self.renderer {
-            for i in 0..1 {
-                for j in 0..1 {
+            for i in 0..8 {
+                for j in 0..8 {
                     let mut chunk = Chunk::new_full(i, 0, j);
                     // if it returns true (which it does when the mesh was regenerated) then we increment the chunk update counter
                     if chunk.generate_mesh(&renderer.get_gpu().device) {
@@ -331,11 +331,11 @@ impl ApplicationHandler for App {
                             );
 
                             ui.label(
-                                egui::RichText::new(format!("Lowest FPS: {}", highest_fps)).color(color),
+                                egui::RichText::new(format!("Highest FPS: {}", highest_fps)).color(color),
                             );
 
                             ui.label(
-                                egui::RichText::new(format!("Highest FPS: {}", lowest_fps)).color(color),
+                                egui::RichText::new(format!("Lowest FPS: {}", lowest_fps)).color(color),
                             );
                         });
 
