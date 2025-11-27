@@ -412,7 +412,6 @@ impl ApplicationHandler for App {
                     screen_descriptor,
                     paint_jobs,
                     textures_delta,
-                    delta_time,
                     &mut self.chunks,
                     self.camera_pos, self.camera_rot,
                 );

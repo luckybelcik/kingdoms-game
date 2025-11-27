@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::{client::rendering::{core::Scene, gpu::Gpu}, shared::{chunk::Chunk, render::{create_mdi_commands}}};
 
 pub struct Renderer {
@@ -54,7 +52,6 @@ impl Renderer {
         screen_descriptor: egui_wgpu::ScreenDescriptor,
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
-        delta_time: Duration,
         chunks: &mut Vec<Chunk>,
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,

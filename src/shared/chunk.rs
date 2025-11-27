@@ -7,7 +7,6 @@ pub struct Chunk {
     pub mesh: Option<ChunkMesh>,
     pub infos: Option<[NormalGroupInfo; 6]>,
     is_dirty: bool,
-    chunk_mask: [u32; CHUNK_SIZE * CHUNK_SIZE],
 }
 
 impl Chunk {
@@ -26,7 +25,6 @@ impl Chunk {
             mesh: None,
             infos: None,
             is_dirty: true,
-            chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE],
         }
     }
 
@@ -37,7 +35,6 @@ impl Chunk {
             mesh: None,
             infos: None,
             is_dirty: true,
-            chunk_mask: [1; CHUNK_SIZE * CHUNK_SIZE],
         }
     }
 

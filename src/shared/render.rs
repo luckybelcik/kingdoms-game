@@ -91,7 +91,7 @@ pub fn create_mdi_commands(
 
         let dot_product = camera_forward_vector.dot(&normal_vector);
 
-        let is_culled = dot_product > 0.0;
+        let _is_culled = dot_product > 0.0;
 
         commands[i].first_instance = info.offset;
 
