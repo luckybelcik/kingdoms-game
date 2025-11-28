@@ -1,13 +1,6 @@
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, render::{indirect::create_mdi_commands, push_constants::PushConstants, vertex::Vertex}}};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 
-const QUAD_VERTICES: &[f32] = &[
-    0.0, 0.0, 0.0,
-    1.0, 0.0, 0.0,
-    0.0, 1.0, 0.0,
-    1.0, 1.0, 0.0,
-];
-
 const QUAD_INDICES: &[u32] = &[
     0, 2, 1,
     2, 3, 1,
@@ -16,21 +9,12 @@ const QUAD_INDICES: &[u32] = &[
 
 pub struct Scene {
     pub pipeline: wgpu::RenderPipeline,
-    shared_quad_vbo: wgpu::Buffer,
     shared_quad_ibo: wgpu::Buffer,
 }
 
 impl Scene {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         let pipeline = Self::create_pipeline(device, surface_format);
-
-        let shared_quad_vbo = device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: Some("Shared Quad VBO"),
-                contents: bytemuck::cast_slice(QUAD_VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
-        );
 
         let shared_quad_ibo = device.create_buffer_init(
             &BufferInitDescriptor {
@@ -42,7 +26,6 @@ impl Scene {
 
         Self {
             pipeline,
-            shared_quad_vbo,
             shared_quad_ibo,
         }
     }
@@ -52,14 +35,13 @@ impl Scene {
         // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
         PushConstants::update_view_projection_matrix(renderpass, camera_pos, camera_rot, aspect_ratio);
 
-        renderpass.set_vertex_buffer(0, self.shared_quad_vbo.slice(..));
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
         
         for chunk in chunks.iter() {
             if let Some(mesh) = &chunk.mesh {
                 let full_buffer = mesh.get_instance_points();
                 
-                renderpass.set_vertex_buffer(1, mesh.get_instance_points().slice(..));
+                renderpass.set_vertex_buffer(0, mesh.get_instance_points().slice(..));
             
                 PushConstants::update_model_matrix(renderpass, chunk);
                 //renderpass.multi_draw_indexed_indirect(mesh.get_indirect_buffer(), 0, 6);
@@ -79,8 +61,7 @@ impl Scene {
                         let start_byte = (info.offset as wgpu::BufferAddress) * std::mem::size_of::<Vertex>() as wgpu::BufferAddress;
                         let end_byte = start_byte + (info.count as wgpu::BufferAddress) * std::mem::size_of::<Vertex>() as wgpu::BufferAddress;
 
-                        renderpass.set_vertex_buffer(0, self.shared_quad_vbo.slice(..));
-                        renderpass.set_vertex_buffer(1, full_buffer.slice(start_byte..end_byte));
+                        renderpass.set_vertex_buffer(0, full_buffer.slice(start_byte..end_byte));
                         let index_count = 6;
                         renderpass.draw_indexed(
                             0..index_count,
@@ -117,7 +98,6 @@ impl Scene {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[],
-            // first is for the model, second is for the view
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
@@ -127,7 +107,7 @@ impl Scene {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: Some("vertex_main"),
-                buffers: &[Vertex::vertex_description(), Vertex::instance_description()],
+                buffers: &[Vertex::instance_description()],
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState {

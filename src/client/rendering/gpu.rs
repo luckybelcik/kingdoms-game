@@ -1,3 +1,5 @@
+use crate::shared::render::push_constants::PUSH_CONSTANTS_SIZE;
+
 pub struct Gpu {
     pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
@@ -75,7 +77,7 @@ impl Gpu {
                     memory_hints: wgpu::MemoryHints::default(),
                     required_features: wgpu::Features::PUSH_CONSTANTS,
                     required_limits: wgpu::Limits {
-                        max_push_constant_size: 128,
+                        max_push_constant_size: PUSH_CONSTANTS_SIZE,
                         ..adapter.limits()
                     },
                     experimental_features: wgpu::ExperimentalFeatures::disabled(),

@@ -1,6 +1,9 @@
-struct Uniform {
-    vp: mat4x4<f32>,
-};
+const QUAD_VERTICES: array<vec3<f32>, 4> = array<vec3<f32>, 4>(
+    vec3<f32>(0.0, 0.0, 0.0),
+    vec3<f32>(1.0, 0.0, 0.0),
+    vec3<f32>(0.0, 1.0, 0.0),
+    vec3<f32>(1.0, 1.0, 0.0),
+);
 
 //@group(0) @binding(0)
 //var<uniform> ubo: Uniform;
@@ -14,7 +17,6 @@ var<push_constant> push: PushConstants;
 
 struct VertexInput {
     @builtin(vertex_index) vertex_id: u32,
-    @location(0) quad_pos: vec3<f32>,
     @location(1) position: u32,
     @location(2) id: u32,
 };
@@ -71,21 +73,27 @@ const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
 @vertex
 fn vertex_main(vert: VertexInput) -> VertexOutput {
     var out: VertexOutput;
+    var quad_pos: vec3<f32>;
     switch vert.vertex_id {
         case 0u: {
             out.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+            quad_pos = QUAD_VERTICES[0];
         }
         case 1u: { 
             out.color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+            quad_pos = QUAD_VERTICES[1];
         }
         case 2u: {
             out.color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+            quad_pos = QUAD_VERTICES[2];
         }
         case 3u: { 
-            out.color = vec4<f32>(0.0, 0.0, 0.0, 1.0); 
+            out.color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+            quad_pos = QUAD_VERTICES[3];
         }
         default: {
             out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0); 
+            quad_pos = vec3<f32>(0.0, 0.0, 0.0);
         }
     }
 
@@ -99,7 +107,7 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
 
     let face_transform = FACE_TRANSFORMS[index];
 
-    out.position = push.vp * push.model * (instance_local_pos + face_transform * vec4<f32>(vert.quad_pos, 1.0));
+    out.position = push.vp * push.model * (instance_local_pos + face_transform * vec4<f32>(quad_pos, 1.0));
     return out;
 };
 
