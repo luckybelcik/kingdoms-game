@@ -286,11 +286,15 @@ impl App {
         if let Some(app_info) = self.app_info.as_mut() {
             app_info.chunk_count = self.chunks.len() as u64;
             let mut mem = 0;
-            for chunk in &self.chunks {
-                if let Some(mesh) = &chunk.mesh {
-                    mem += mesh.get_instance_points().size() as u64;
-                }
-            } 
+            if let Some(renderer) = &self.renderer {
+                for chunk in &mut self.chunks {
+                    chunk.generate_mesh(&renderer.get_gpu().device);
+                    if let Some(mesh) = &chunk.mesh {
+                        mem += mesh.get_instance_points().size() as u64;
+                    }
+                } 
+            }
+
             app_info.total_chunk_vram = mem;
             app_info.avg_chunk_vram = app_info.total_chunk_vram / app_info.chunk_count as u64;
         }
