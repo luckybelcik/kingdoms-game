@@ -1,12 +1,11 @@
-use std::sync::Mutex;
 use std::{sync::Arc};
 use std::f32::consts::PI;
 use web_time::{Instant};
-use winit::{keyboard::KeyCode,
+use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::WindowEvent,
-    keyboard::{PhysicalKey},
+    event::{ElementState, KeyEvent, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
     window::{Theme, Window},
 };
 
@@ -20,7 +19,7 @@ pub struct App {
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub chunks: Vec<Chunk>,
-    pub appinfo: Option<Arc<Mutex<AppInfo>>>,
+    pub app_info: Option<AppInfo>,
 }
 
 impl ApplicationHandler for App {
@@ -95,7 +94,7 @@ impl ApplicationHandler for App {
         app_info.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);
         app_info.camera_rot = nalgebra_glm::vec3(0.0, 0.0, 0.0);
 
-        self.appinfo = Some(Arc::new(Mutex::new(app_info)));
+        self.app_info = Some(app_info);
     }
 
     fn window_event(
@@ -104,7 +103,7 @@ impl ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let mut app_info = self.appinfo.as_mut().expect("Failed to get app info").lock().unwrap();
+        let Some(app_info) = self.app_info.as_mut() else { return };
 
         app_info.tick += 1;
 
@@ -131,17 +130,6 @@ impl ApplicationHandler for App {
             }
         }
 
-        app_info.chunk_count = self.chunks.len() as u64;
-        let mut mem = 0;
-        for chunk in &self.chunks {
-            if let Some(mesh) = &chunk.mesh {
-                mem += mesh.get_instance_points().size() as u64;
-            }
-        } 
-        app_info.total_chunk_vram = mem;
-        app_info.avg_chunk_vram = app_info.total_chunk_vram / app_info.chunk_count as u64;
-
-
         let mut lowest_fps = 0;
         let mut highest_fps = 0;
 
@@ -150,161 +138,210 @@ impl ApplicationHandler for App {
             highest_fps = *app_info.avg_fps_history.iter().max().unwrap_or(&0);
         }
 
-        let (Some(gui_state), Some(renderer), Some(window), Some(last_render_time)) = (
-            self.gui_state.as_mut(),
-            self.renderer.as_mut(),
-            self.window.as_ref(),
-            app_info.last_render_time.as_mut(),
-        ) else {
-            return;
-        };
+        {
+            let (Some(gui_state), Some(window)) = (
+                self.gui_state.as_mut(),
+                self.window.as_ref(),
+            ) else {
+                return;
+            };
 
-        if gui_state.on_window_event(window, &event).consumed {
-            return;
+            if gui_state.on_window_event(window, &event).consumed {
+                return;
+            }
         }
 
         match event {
-            WindowEvent::KeyboardInput {
-                event:
-                    winit::event::KeyEvent { physical_key, state, .. },
-                ..
-            } => {
-                if let PhysicalKey::Code(key_code) = physical_key {
-                    match state {
-                        winit::event::ElementState::Pressed => {
-                            self.pressed_keys.insert(key_code);
-                        }
-                        winit::event::ElementState::Released => {
-                            self.pressed_keys.remove(&key_code);
-                        }
-                    }
-                }
-                if let PhysicalKey::Code(KeyCode::Escape) = physical_key {
-                    event_loop.exit();
-                }
+            WindowEvent::KeyboardInput { event, .. } => {
+                self.handle_keyboard_input(event, event_loop);
             }
-            WindowEvent::ScaleFactorChanged { .. } => {
-                {
-                    let scale_factor = window.scale_factor() as f32;
-                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
-                }
-            }
-            WindowEvent::Resized(PhysicalSize { width, height }) => {
-                if width == 0 || height == 0 {
-                    return;
-                }
-
-                log::info!("Resizing renderer surface to: ({width}, {height})");
-                renderer.resize(width, height);
-                app_info.last_size = (width, height);
-
-                {
-                    let scale_factor = window.scale_factor() as f32;
-                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
-                }
-            }
+            WindowEvent::Resized(size) => self.handle_resize(size),
             WindowEvent::CloseRequested => {
                 log::info!("Close requested. Exiting...");
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                let now = Instant::now();
-                let delta_time = now - *last_render_time;
-                *last_render_time = now;
-
-                // --- Camera Update ---
-                let delta_seconds = delta_time.as_secs_f32();
-                let move_speed = 20.0 * delta_seconds;
-                let rotation_speed = 2.0 * delta_seconds;
-
-                // Rotation
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowUp) {
-                    app_info.camera_rot.x += rotation_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowDown) {
-                    app_info.camera_rot.x -= rotation_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowLeft) {
-                    app_info.camera_rot.y += rotation_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::ArrowRight) {
-                    app_info.camera_rot.y -= rotation_speed;
-                }
-                // Clamp pitch
-                app_info.camera_rot.x = app_info.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
-
-                // Movement
-                let (sin_y, cos_y) = app_info.camera_rot.y.sin_cos();
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyW) {
-                    app_info.camera_pos.x += cos_y * move_speed;
-                    app_info.camera_pos.z += sin_y * move_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyS) {
-                    app_info.camera_pos.x -= cos_y * move_speed;
-                    app_info.camera_pos.z -= sin_y * move_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyA) {
-                    app_info.camera_pos.x -= sin_y * move_speed;
-                    app_info.camera_pos.z += cos_y * move_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::KeyD) {
-                    app_info.camera_pos.x += sin_y * move_speed;
-                    app_info.camera_pos.z -= cos_y * move_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::Space) {
-                    app_info.camera_pos.y += move_speed;
-                }
-                if self.pressed_keys.contains(&winit::keyboard::KeyCode::ShiftLeft) {
-                    app_info.camera_pos.y -= move_speed;
-                }
-
-                let gui_input = gui_state.take_egui_input(window);
-
-                gui_state.egui_ctx().begin_pass(gui_input);
-
-                draw_ui(
-                    gui_state.egui_ctx(),
-                    avg_delta_time,
-                    highest_fps,
-                    lowest_fps,
-                    &mut app_info,
-                );
-
-                let egui_winit::egui::FullOutput {
-                    textures_delta,
-                    shapes,
-                    pixels_per_point,
-                    platform_output,
-                    ..
-                } = gui_state.egui_ctx().end_pass();
-
-                gui_state.handle_platform_output(window, platform_output);
-
-                let paint_jobs = gui_state.egui_ctx().tessellate(shapes, pixels_per_point);
-
-                let screen_descriptor = {
-                    let (width, height) = app_info.last_size;
-                    if width == 0 || height == 0 {
-                        return;
-                    }
-                    egui_wgpu::ScreenDescriptor {
-                        size_in_pixels: [width, height],
-                        pixels_per_point,
-                    }
-                };
-
-                renderer.render_frame(
-                    screen_descriptor,
-                    paint_jobs,
-                    textures_delta,
-                    &mut self.chunks,
-                    app_info.camera_pos, app_info.camera_rot,
-                );
+                self.handle_redraw(avg_delta_time, highest_fps, lowest_fps);
             }
             _ => (),
         }
 
+        let Some(window) = self.window.as_ref() else { return };
         window.request_redraw();
+    }
+}
+
+impl App {
+    fn handle_keyboard_input(&mut self, event: KeyEvent, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let PhysicalKey::Code(key_code) = event.physical_key {
+            match event.state {
+                ElementState::Pressed => {
+                    self.pressed_keys.insert(key_code);
+                }
+                ElementState::Released => {
+                    self.pressed_keys.remove(&key_code);
+                }
+            }
+        }
+        if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
+            event_loop.exit();
+        }
+    }
+
+    fn handle_resize(&mut self, new_size: PhysicalSize<u32>) {
+        let (Some(renderer), Some(app_info)) = (self.renderer.as_mut(), self.app_info.as_mut()) else { return };
+
+        if new_size.width > 0 && new_size.height > 0 {
+            log::info!("Resizing renderer surface to: ({}, {})", new_size.width, new_size.height);
+            renderer.resize(new_size.width, new_size.height);
+            app_info.last_size = (new_size.width, new_size.height);
+        }
+    }
+
+    fn handle_redraw(&mut self, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
+        const TICK_RATE: u32 = 60;
+        const FIXED_TIMESTEP: f64 = 1.0 / TICK_RATE as f64;
+
+        {
+            let mut accumulator;
+            let delta_time;
+            let now;
+
+            // we have to do the client tick in this scope to respect borrowing rules
+            {
+                let Some(app_info) = self.app_info.as_mut() else { return };
+                now = Instant::now();
+                delta_time = now - app_info.last_render_time.unwrap();
+
+                accumulator = app_info.accumulator;
+                accumulator += delta_time.as_secs_f64();
+
+                while accumulator >= FIXED_TIMESTEP {
+                    self.handle_client_tick(FIXED_TIMESTEP as f32);
+                    accumulator -= FIXED_TIMESTEP;
+                }
+            }
+
+            let Some(app_info) = self.app_info.as_mut() else { return };
+            app_info.accumulator = accumulator;
+            app_info.last_render_time = Some(now);
+
+            self.update_camera(delta_time.as_secs_f32());
+        }
+
+        let (Some(gui_state), Some(renderer), Some(window), Some(app_info)) = (
+            self.gui_state.as_mut(),
+            self.renderer.as_mut(),
+            self.window.as_ref(),
+            self.app_info.as_mut(),
+        ) else {
+            return;
+        };
+
+        let gui_input = gui_state.take_egui_input(window);
+        gui_state.egui_ctx().begin_pass(gui_input);
+
+        draw_ui(
+            gui_state.egui_ctx(),
+            avg_delta_time,
+            highest_fps,
+            lowest_fps,
+            app_info,
+        );
+
+        let egui::FullOutput {
+            textures_delta,
+            shapes,
+            pixels_per_point,
+            platform_output,
+            ..
+        } = gui_state.egui_ctx().end_pass();
+
+        gui_state.handle_platform_output(window, platform_output);
+
+        let paint_jobs = gui_state.egui_ctx().tessellate(shapes, pixels_per_point);
+
+        let screen_descriptor = {
+            let (width, height) = app_info.last_size;
+            if width == 0 || height == 0 {
+                return;
+            }
+            egui_wgpu::ScreenDescriptor {
+                size_in_pixels: [width, height],
+                pixels_per_point,
+            }
+        };
+
+        renderer.render_frame(
+            screen_descriptor,
+            paint_jobs,
+            textures_delta,
+            &mut self.chunks,
+            app_info.camera_pos,
+            app_info.camera_rot,
+        );
+    }
+
+    fn handle_client_tick(&mut self, _delta_seconds: f32) {
+        if let Some(app_info) = self.app_info.as_mut() {
+            app_info.chunk_count = self.chunks.len() as u64;
+            let mut mem = 0;
+            for chunk in &self.chunks {
+                if let Some(mesh) = &chunk.mesh {
+                    mem += mesh.get_instance_points().size() as u64;
+                }
+            } 
+            app_info.total_chunk_vram = mem;
+            app_info.avg_chunk_vram = app_info.total_chunk_vram / app_info.chunk_count as u64;
+        }
+    }
+
+    fn update_camera(&mut self, delta_seconds: f32) {
+        let Some(app_info) = self.app_info.as_mut() else { return };
+
+        let move_speed = 20.0 * delta_seconds;
+        let rotation_speed = 2.0 * delta_seconds;
+
+        // Rotation
+        if self.pressed_keys.contains(&KeyCode::ArrowUp) {
+            app_info.camera_rot.x += rotation_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::ArrowDown) {
+            app_info.camera_rot.x -= rotation_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::ArrowLeft) {
+            app_info.camera_rot.y += rotation_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::ArrowRight) {
+            app_info.camera_rot.y -= rotation_speed;
+        }
+        // Clamp pitch
+        app_info.camera_rot.x = app_info.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
+
+        // Movement
+        let (sin_y, cos_y) = app_info.camera_rot.y.sin_cos();
+        if self.pressed_keys.contains(&KeyCode::KeyW) {
+            app_info.camera_pos.x += cos_y * move_speed;
+            app_info.camera_pos.z += sin_y * move_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::KeyS) {
+            app_info.camera_pos.x -= cos_y * move_speed;
+            app_info.camera_pos.z -= sin_y * move_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::KeyA) {
+            app_info.camera_pos.x -= sin_y * move_speed;
+            app_info.camera_pos.z += cos_y * move_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::KeyD) {
+            app_info.camera_pos.x += sin_y * move_speed;
+            app_info.camera_pos.z -= cos_y * move_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::Space) {
+            app_info.camera_pos.y += move_speed;
+        }
+        if self.pressed_keys.contains(&KeyCode::ShiftLeft) {
+            app_info.camera_pos.y -= move_speed;
+        }
     }
 }
 
