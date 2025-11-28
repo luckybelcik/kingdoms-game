@@ -7,10 +7,11 @@ pub struct Chunk {
     pub mesh: Option<ChunkMesh>,
     pub infos: Option<[NormalGroupInfo; 6]>,
     is_dirty: bool,
+    chunk_mask: [u32; CHUNK_SIZE * CHUNK_SIZE]
 }
 
 impl Chunk {
-    pub fn mark_dirt(&mut self) {
+    pub fn mark_dirty(&mut self) {
         self.is_dirty = true;
     }
 
@@ -25,6 +26,7 @@ impl Chunk {
             mesh: None,
             infos: None,
             is_dirty: true,
+            chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
 
@@ -35,6 +37,7 @@ impl Chunk {
             mesh: None,
             infos: None,
             is_dirty: true,
+            chunk_mask: [0xffffffff; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
 
@@ -44,6 +47,10 @@ impl Chunk {
         } else {
             self.blocks[x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE]
         }
+    }
+
+    pub fn get_chunk_mask(&self) -> &[u32] {
+        &self.chunk_mask
     }
 
     pub fn generate_mesh(&mut self, device: &wgpu::Device) -> bool {
@@ -75,67 +82,87 @@ impl Chunk {
             [0, 0, -1],
         ];
 
-        for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    let block_id = self.get_block(x, y, z);
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                let current_slice = self.chunk_mask[y + z * CHUNK_SIZE];
 
-                    if block_id == 0 {
-                        continue;
+                // Faces along +X and -X are found by shifting the bits
+                // within the slice and comparing.
+                let xplus = current_slice & !(current_slice << 1);
+                let xminus = current_slice & !(current_slice >> 1);
+
+                // Faces along +Y and -Y are found by comparing the current slice
+                // with the slices directly above and below it.
+                let yplus;
+                if y < CHUNK_SIZE - 1 {
+                    let upslice = self.chunk_mask[(y + 1) + z * CHUNK_SIZE];
+                    yplus = current_slice & !upslice;
+                } else { // on chunk border, all top faces are visible
+                    yplus = current_slice;
+                }
+
+                let yminus;
+                if y != 0 {
+                    let downslice = self.chunk_mask[(y - 1) + z * CHUNK_SIZE];
+                    yminus = current_slice & !downslice;
+                } else { // on chunk border, all bottom faces are visible
+                    yminus = current_slice;
+                }
+
+                // Faces along +Z and -Z are found by comparing the current slice
+                // with the slices in front and behind it.
+                let zplus;
+                if z < CHUNK_SIZE - 1 {
+                    let front_slice = self.chunk_mask[y + (z + 1) * CHUNK_SIZE];
+                    zplus = current_slice & !front_slice;
+                } else { // on chunk border, all front faces are visible
+                    zplus = current_slice;
+                }
+
+                let zminus;
+                if z > 0 {
+                    let back_slice = self.chunk_mask[y + (z - 1) * CHUNK_SIZE];
+                    zminus = current_slice & !back_slice;
+                } else { // on chunk border, all back faces are visible
+                    zminus = current_slice;
+                }
+
+                for i in 0..32 {
+                    // x plus bit
+                    let xpb = xplus & (1 << i);
+                    // x minus bit
+                    let xmb = xminus & (1 << i);
+                    let ypb = yplus & (1 << i);
+                    let ymb = yminus & (1 << i);
+                    let zpb = zplus & (1 << i);
+                    let zmb = zminus & (1 << i);
+
+                    //                 this zero is filler data that gets replaced VVV
+                    let point = Vertex { data: (i | (y << 5) | (z << 10) | (0 << 15)) as u32, id: 1 };
+
+                    if xpb != 0 {
+                        let point = Vertex { data: point.data | ((0 as u32) << 15), id: point.id };
+                        points_right.push(point)
                     }
-
-                    for (i, &normal) in normals.iter().enumerate() {
-                        let nx = normal[0] as i32;
-                        let ny = normal[1] as i32;
-                        let nz = normal[2] as i32;
-
-                        let neighbor_x = x as i32 + nx;
-                        let neighbor_y = y as i32 + ny;
-                        let neighbor_z = z as i32 + nz;
-                        
-                        let neighbor_block = 
-                            if neighbor_x < 0 || neighbor_y < 0 || neighbor_z < 0 {
-                                0 
-                            } 
-                            else {
-                                self.get_block(
-                                    neighbor_x as usize,
-                                    neighbor_y as usize,
-                                    neighbor_z as usize
-                                )
-                            };
-
-                        if neighbor_block == 0 {
-                            let x_u8 = (x & 0b11111) as u32;
-                            let y_u8 = (y & 0b11111) as u32;
-                            let z_u8 = (z & 0b11111) as u32;
-
-                            let point = Vertex { data: x_u8 | (y_u8 << 5) | (z_u8 << 10) | ((i as u32) << 15), id: 1 };
-
-                            match i {
-                                0 => {
-                                    points_right.push(point);
-                                }
-                                1 => {
-                                    points_left.push(point);
-                                }
-                                2 => {
-                                    points_top.push(point);
-                                }
-                                3 => {
-                                    points_bottom.push(point);
-                                }
-                                4 => {
-                                    points_front.push(point);
-                                }
-                                5 => {
-                                    points_back.push(point);
-                                }
-                                _ => {
-                                    unreachable!("You shouldn't be here!")
-                                }
-                            }
-                        }
+                    if xmb != 0 {
+                        let point = Vertex { data: point.data | ((1 as u32) << 15), id: point.id };
+                        points_left.push(point)
+                    }
+                    if ypb != 0 {
+                        let point = Vertex { data: point.data | ((2 as u32) << 15), id: point.id };
+                        points_top.push(point)
+                    }
+                    if ymb != 0 {
+                        let point = Vertex { data: point.data | ((3 as u32) << 15), id: point.id };
+                        points_bottom.push(point)
+                    }
+                    if zpb != 0 {
+                        let point = Vertex { data: point.data | ((4 as u32) << 15), id: point.id };
+                        points_front.push(point)
+                    }
+                    if zmb != 0 {
+                        let point = Vertex { data: point.data | ((5 as u32) << 15), id: point.id };
+                        points_back.push(point)
                     }
                 }
             }
