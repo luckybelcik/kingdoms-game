@@ -1,4 +1,4 @@
-use crate::{client::rendering::{renderer::Renderer}, shared::{chunk::Chunk, constants::CHUNK_SIZE, render::{Vertex, create_mdi_commands}}};
+use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, constants::CHUNK_SIZE, render::{PushConstants, Vertex, create_mdi_commands}}};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 
 const QUAD_VERTICES: &[f32] = &[
@@ -15,7 +15,6 @@ const QUAD_INDICES: &[u32] = &[
 
 
 pub struct Scene {
-    pub uniform: UniformBinding,
     pub pipeline: wgpu::RenderPipeline,
     shared_quad_vbo: wgpu::Buffer,
     shared_quad_ibo: wgpu::Buffer,
@@ -23,8 +22,7 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        let uniform = UniformBinding::new(device);
-        let pipeline = Self::create_pipeline(device, surface_format, &uniform);
+        let pipeline = Self::create_pipeline(device, surface_format);
 
         let shared_quad_vbo = device.create_buffer_init(
             &BufferInitDescriptor {
@@ -43,16 +41,21 @@ impl Scene {
         );
 
         Self {
-            uniform,
             pipeline,
             shared_quad_vbo,
             shared_quad_ibo,
         }
     }
 
-    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &Vec<Chunk>, camera_rot: nalgebra_glm::Vec3) {
+    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &Vec<Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32) {
         renderpass.set_pipeline(&self.pipeline);
-        renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
+        // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
+
+        let projection =
+            nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
+        let view = nalgebra_glm::look_at_lh(&camera_pos, &(camera_pos + Self::camera_forward(camera_rot)), &nalgebra_glm::Vec3::y());
+
+        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, std::mem::size_of::<nalgebra_glm::Mat4>() as u32, bytemuck::cast_slice(&[projection * view]));
 
         renderpass.set_vertex_buffer(0, self.shared_quad_vbo.slice(..));
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -102,21 +105,8 @@ impl Scene {
     pub fn update(
         &mut self,
         queue: &wgpu::Queue,
-        aspect_ratio: f32,
-        camera_pos: nalgebra_glm::Vec3,
-        camera_rot: nalgebra_glm::Vec3,
     ) {
-        let projection =
-            nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
-        let view = nalgebra_glm::look_at_lh(&camera_pos, &(camera_pos + Self::camera_forward(camera_rot)), &nalgebra_glm::Vec3::y());
-
-        self.uniform.update_buffer(
-            queue,
-            0,
-            UniformBuffer {
-                vp: projection * view,
-            },
-        );
+        // this method will be used later for the SSBO
     }
 
     fn camera_forward(camera_rot: nalgebra_glm::Vec3) -> nalgebra_glm::Vec3 {
@@ -132,7 +122,6 @@ impl Scene {
     fn create_pipeline(
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
-        uniform: &UniformBinding,
     ) -> wgpu::RenderPipeline {
         let shader_source = include_str!("../shaders/shader.wgsl");
 
@@ -143,10 +132,11 @@ impl Scene {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&uniform.bind_group_layout],
+            bind_group_layouts: &[],
+            // first is for the model, second is for the view
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStages::VERTEX,
-                range: 0..std::mem::size_of::<nalgebra_glm::Mat4>() as u32,
+                range: 0..std::mem::size_of::<PushConstants>() as u32,
             }],
         });
 
@@ -193,72 +183,5 @@ impl Scene {
             multiview: None,
             cache: None,
         })
-    }
-}
-
-#[repr(C)]
-#[derive(Default, Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct UniformBuffer {
-    vp: nalgebra_glm::Mat4,
-}
-
-pub struct UniformBinding {
-    pub buffer: wgpu::Buffer,
-    pub bind_group: wgpu::BindGroup,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-}
-
-impl UniformBinding {
-    pub fn new(device: &wgpu::Device) -> Self {
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Uniform Buffer"),
-                contents: bytemuck::cast_slice(&[UniformBuffer::default()]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            },
-        );
-
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("uniform_bind_group_layout"),
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-            label: Some("uniform_bind_group"),
-        });
-
-        Self {
-            buffer,
-            bind_group,
-            bind_group_layout,
-        }
-    }
-
-    pub fn update_buffer(
-        &mut self,
-        queue: &wgpu::Queue,
-        offset: wgpu::BufferAddress,
-        uniform_buffer: UniformBuffer,
-    ) {
-        queue.write_buffer(
-            &self.buffer,
-            offset,
-            bytemuck::cast_slice(&[uniform_buffer]),
-        )
     }
 }

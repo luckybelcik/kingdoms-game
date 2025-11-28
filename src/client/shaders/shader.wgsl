@@ -2,10 +2,15 @@ struct Uniform {
     vp: mat4x4<f32>,
 };
 
-@group(0) @binding(0)
-var<uniform> ubo: Uniform;
+//@group(0) @binding(0)
+//var<uniform> ubo: Uniform;
 
-var<push_constant> model: mat4x4<f32>;
+struct PushConstants {
+    model: mat4x4<f32>,
+    vp: mat4x4<f32>,
+}
+
+var<push_constant> push: PushConstants;
 
 struct VertexInput {
     @builtin(vertex_index) vertex_id: u32,
@@ -94,7 +99,7 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
 
     let face_transform = FACE_TRANSFORMS[index];
 
-    out.position = ubo.vp * model * (instance_local_pos + face_transform * vec4<f32>(vert.quad_pos, 1.0));
+    out.position = push.vp * push.model * (instance_local_pos + face_transform * vec4<f32>(vert.quad_pos, 1.0));
     return out;
 };
 

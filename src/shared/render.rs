@@ -39,6 +39,13 @@ impl Vertex {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PushConstants {
+    pub model: glm::Mat4,
+    pub view: glm::Mat4,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct DrawElementsIndirectCommand {
     pub index_count: u32,
     pub instance_count: u32,

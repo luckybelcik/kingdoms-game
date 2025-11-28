@@ -58,9 +58,6 @@ impl Renderer {
     ) {
         self.scene.update(
             &self.gpu.queue,
-            self.gpu.aspect_ratio(),
-            camera_pos,
-            camera_rot,
         );
 
         for (id, image_delta) in &textures_delta.set {
@@ -160,7 +157,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             
-            self.scene.render(&mut render_pass, chunks, camera_rot);
+            self.scene.render(&mut render_pass, chunks, camera_rot, camera_pos, self.gpu.aspect_ratio());
 
             self.egui_renderer.render(
                 &mut render_pass.forget_lifetime(),
