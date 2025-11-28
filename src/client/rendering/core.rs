@@ -1,4 +1,4 @@
-use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, constants::CHUNK_SIZE, render::{PushConstants, Vertex, create_mdi_commands}}};
+use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, render::{indirect::create_mdi_commands, push_constants::PushConstants, vertex::Vertex}}};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 
 const QUAD_VERTICES: &[f32] = &[
@@ -50,12 +50,7 @@ impl Scene {
     pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &Vec<Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32) {
         renderpass.set_pipeline(&self.pipeline);
         // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
-
-        let projection =
-            nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
-        let view = nalgebra_glm::look_at_lh(&camera_pos, &(camera_pos + Self::camera_forward(camera_rot)), &nalgebra_glm::Vec3::y());
-
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, std::mem::size_of::<nalgebra_glm::Mat4>() as u32, bytemuck::cast_slice(&[projection * view]));
+        PushConstants::update_view_projection_matrix(renderpass, camera_pos, camera_rot, aspect_ratio);
 
         renderpass.set_vertex_buffer(0, self.shared_quad_vbo.slice(..));
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -65,9 +60,8 @@ impl Scene {
                 let full_buffer = mesh.get_instance_points();
                 
                 renderpass.set_vertex_buffer(1, mesh.get_instance_points().slice(..));
-                
-                let model_matrix = nalgebra_glm::translate(&nalgebra_glm::Mat4::identity(), &(chunk.get_chunk_pos().map(|x| x as f32) * CHUNK_SIZE as f32));
-                renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[model_matrix]));
+            
+                PushConstants::update_model_matrix(renderpass, chunk);
                 //renderpass.multi_draw_indexed_indirect(mesh.get_indirect_buffer(), 0, 6);
 
                 
@@ -109,16 +103,6 @@ impl Scene {
         // this method will be used later for the SSBO
     }
 
-    fn camera_forward(camera_rot: nalgebra_glm::Vec3) -> nalgebra_glm::Vec3 {
-        let (sin_pitch, cos_pitch) = camera_rot.x.sin_cos();
-        let (sin_yaw, cos_yaw) = camera_rot.y.sin_cos();
-        nalgebra_glm::vec3(
-            cos_pitch * cos_yaw,
-            sin_pitch,
-            cos_pitch * sin_yaw,
-        ).normalize()
-    }
-
     fn create_pipeline(
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
@@ -134,10 +118,7 @@ impl Scene {
             label: None,
             bind_group_layouts: &[],
             // first is for the model, second is for the view
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStages::VERTEX,
-                range: 0..std::mem::size_of::<PushConstants>() as u32,
-            }],
+            push_constant_ranges: &[PushConstants::get_range()],
         });
 
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

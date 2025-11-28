@@ -1,4 +1,4 @@
-use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{NormalGroupInfo, Vertex}};
+use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{indirect::NormalGroupInfo, vertex::Vertex}};
 use nalgebra_glm as glm;
 
 pub struct Chunk {

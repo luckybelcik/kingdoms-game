@@ -1,4 +1,4 @@
-use crate::{client::rendering::{core::Scene, gpu::Gpu}, shared::{chunk::Chunk, render::{create_mdi_commands}}};
+use crate::{client::rendering::{core::Scene, gpu::Gpu}, shared::{chunk::Chunk, render::indirect::{create_mdi_commands}}};
 
 pub struct Renderer {
     gpu: Gpu,
