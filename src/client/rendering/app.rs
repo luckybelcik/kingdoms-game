@@ -11,6 +11,7 @@ use winit::{
 };
 
 use crate::client::rendering::appinfo::AppInfo;
+use crate::client::rendering::apprenderconfig::AppRenderConfig;
 use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
@@ -22,6 +23,7 @@ pub struct App {
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub chunks: HashMap<nalgebra_glm::IVec3, Chunk>,
     pub app_info: Option<AppInfo>,
+    pub app_render_config: AppRenderConfig
 }
 
 impl ApplicationHandler for App {
@@ -198,23 +200,32 @@ impl App {
             event_loop.exit();
         }
         if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key {
-            let app_info = self.app_info.as_ref().unwrap();
+            if event.state == ElementState::Pressed {
+                let app_info = self.app_info.as_ref().unwrap();
 
-            if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
-                if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
-                    log::info!("Break block at {} {} {}", x, y, z);
-                    chunk.set_block(x, y, z, 0);
+                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
+                    if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+                        log::info!("Break block at {} {} {}", x, y, z);
+                        chunk.set_block(x, y, z, 0);
+                    }
                 }
             }
         }
         if let PhysicalKey::Code(KeyCode::Period) = event.physical_key {
-            let app_info = self.app_info.as_ref().unwrap();
+            if event.state == ElementState::Pressed {
+                let app_info = self.app_info.as_ref().unwrap();
 
-            if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
-                if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
-                    log::info!("Place block at {} {} {}", x, y, z);
-                    chunk.set_block(x, y, z, 1);
+                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
+                    if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+                        log::info!("Place block at {} {} {}", x, y, z);
+                        chunk.set_block(x, y, z, 1);
+                    }
                 }
+            }
+        }
+        if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key {
+            if event.state == ElementState::Pressed {
+                self.app_render_config.toggle_render_textures_bit();
             }
         }
     }
@@ -310,6 +321,7 @@ impl App {
             &mut self.chunks,
             app_info.camera_pos,
             app_info.camera_rot,
+            &self.app_render_config,
         );
     }
 

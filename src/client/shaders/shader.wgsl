@@ -10,6 +10,7 @@ const QUAD_VERTICES: array<vec3<f32>, 4> = array<vec3<f32>, 4>(
 
 struct PushConstants {
     pvm: mat4x4<f32>,
+    app_render_config: u32,
 }
 
 var<push_constant> push: PushConstants;
@@ -76,6 +77,8 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
         transparency = 0.5;
     }
 
+    let render_textures = bool(push.app_render_config & 1);
+
     var out: VertexOutput;
     var quad_pos: vec3<f32>;
     switch vert.vertex_id {
@@ -98,6 +101,23 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
         default: {
             out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0); 
             quad_pos = vec3<f32>(0.0, 0.0, 0.0);
+        }
+    }
+
+    if render_textures {
+        switch vert.id {
+            case 1u: { // stone
+                out.color = vec4<f32>(0.32, 0.32, 0.32, 1.0);
+            }
+            case 2u: { // dirt
+                out.color = vec4<f32>(0.36, 0.27, 0.17, 1.0);
+            }
+            case 3u: { // grass
+                out.color = vec4<f32>(0.35, 0.54, 0.28, 1.0);
+            }
+            default: {
+                out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0); 
+            }
         }
     }
 

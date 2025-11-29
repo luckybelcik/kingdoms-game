@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{client::rendering::{core::Scene, gpu::Gpu}, shared::{chunk::Chunk}};
+use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu}, shared::chunk::Chunk};
 
 pub struct Renderer {
     gpu: Gpu,
@@ -57,6 +57,7 @@ impl Renderer {
         chunks_mut: &mut HashMap<nalgebra_glm::IVec3, Chunk>,
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,
+        render_config: &AppRenderConfig,
     ) {
         self.scene.update(
             &self.gpu.queue,
@@ -174,7 +175,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             
-            self.scene.render(&mut render_pass, chunks_mut, camera_rot, camera_pos, self.gpu.aspect_ratio());
+            self.scene.render(&mut render_pass, chunks_mut, camera_rot, camera_pos, self.gpu.aspect_ratio(), render_config);
 
             self.egui_renderer.render(
                 &mut render_pass.forget_lifetime(),

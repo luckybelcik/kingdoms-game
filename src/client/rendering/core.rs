@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, render::{push_constants::PushConstants, vertex::Vertex}}};
+use crate::{client::rendering::{apprenderconfig::AppRenderConfig, renderer::Renderer}, shared::{chunk::Chunk, render::{push_constants::PushConstants, vertex::Vertex}}};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 
 const QUAD_INDICES: &[u32] = &[
@@ -32,9 +32,10 @@ impl Scene {
         }
     }
 
-    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32) {
+    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig) {
         renderpass.set_pipeline(&self.pipeline);
         // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
+        PushConstants::update_render_config(renderpass, render_config);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
         
