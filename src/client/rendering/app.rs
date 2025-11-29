@@ -11,6 +11,7 @@ use winit::{
 };
 
 use crate::client::rendering::appinfo::AppInfo;
+use crate::client::rendering::util::cast_ray_block_hit;
 use crate::shared::constants::CHUNK_SIZE;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
@@ -200,100 +201,10 @@ impl App {
         if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key {
             let app_info = self.app_info.as_ref().unwrap();
 
-            let ray_pos = app_info.camera_pos;
-            let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
-
-            let (chunk_x_start, chunk_y_start, chunk_z_start) = (
-                ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-                ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-                ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-            );
-
-            let (chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) = (
-                current_block_pos.x as usize % CHUNK_SIZE,
-                current_block_pos.y as usize % CHUNK_SIZE,
-                current_block_pos.z as usize % CHUNK_SIZE,
-            );
-
-            if let Some(chunk) = self.chunks.get_mut(&nalgebra_glm::vec3(chunk_x_start, chunk_y_start, chunk_z_start)) {
-                if chunk.get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
-                    chunk.set_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start, 0);
-                    println!("Broke block camera was inside of!");
-                    return;
+            if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
+                if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+                    chunk.set_block(x, y, z, 0);
                 }
-            };
-
-            let pitch = app_info.camera_rot.x;
-            let yaw = app_info.camera_rot.y;
-
-            let (sin_pitch, cos_pitch) = pitch.sin_cos();
-            let (sin_yaw, cos_yaw) = yaw.sin_cos();
-            let direction = nalgebra_glm::vec3(
-                cos_pitch * cos_yaw,
-                sin_pitch,
-                cos_pitch * sin_yaw,
-            ).normalize();
-
-            const EPSILON: f32 = 1e-6;
-
-            let mut step = nalgebra_glm::vec3(0, 0, 0);
-            let mut t_delta = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
-
-            for i in 0..3 {
-                let d = direction[i];
-                if d.abs() > EPSILON {
-                    step[i] = if d > 0.0 { 1 } else { -1 };
-                    t_delta[i] = 1.0 / d.abs();
-                }
-            }
-
-            let next_boundary = (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
-
-            let mut t_max = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
-
-            for i in 0..3 {
-                if step[i] != 0 {
-                    t_max[i] = next_boundary[i].abs() * t_delta[i];
-                }
-            }
-
-            const MAX_DIST: i32 = 20;
-            for _ in 0..MAX_DIST {
-                if t_max.x < t_max.y {
-                    if t_max.x < t_max.z {
-                        current_block_pos.x += step.x;
-                        t_max.x += t_delta.x;
-                    } else {
-                        current_block_pos.z += step.z;
-                        t_max.z += t_delta.z;
-                    }
-                } else {
-                    if t_max.y < t_max.z {
-                        current_block_pos.y += step.y;
-                        t_max.y += t_delta.y;
-                    } else {
-                        current_block_pos.z += step.z;
-                        t_max.z += t_delta.z;
-                    }
-                }
-
-                let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-                let chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-                let chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-
-                let chunk_relative_x = current_block_pos.x as usize % CHUNK_SIZE;
-                let chunk_relative_y = current_block_pos.y as usize % CHUNK_SIZE;
-                let chunk_relative_z = current_block_pos.z as usize % CHUNK_SIZE;
-
-                if let Some(chunk) = self.chunks.get_mut(&nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z)) {
-                    if chunk.get_block(chunk_relative_x, chunk_relative_y, chunk_relative_z) != 0 {
-                        chunk.set_block(chunk_relative_x, chunk_relative_y, chunk_relative_z, 0);
-                        println!("Set block at: {} {} {}", current_block_pos.x, current_block_pos.y, current_block_pos.z);
-                        println!("In chunk: {} {} {}", chunk_x, chunk_y, chunk_z);
-                        println!("At relative pos: {} {} {}", chunk_relative_x, chunk_relative_y, chunk_relative_z);
-                        break;
-                    }
-                };
             }
         }
     }
