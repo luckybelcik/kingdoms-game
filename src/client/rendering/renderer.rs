@@ -1,4 +1,6 @@
-use crate::{client::rendering::{core::Scene, gpu::Gpu}, shared::{chunk::Chunk, render::indirect::{create_mdi_commands}}};
+use std::collections::HashMap;
+
+use crate::{client::rendering::{core::Scene, gpu::Gpu}, shared::{chunk::Chunk}};
 
 pub struct Renderer {
     gpu: Gpu,
@@ -52,7 +54,7 @@ impl Renderer {
         screen_descriptor: egui_wgpu::ScreenDescriptor,
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
-        chunks: &mut Vec<Chunk>,
+        chunks_mut: &mut HashMap<nalgebra_glm::IVec3, Chunk>,
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,
     ) {
@@ -76,16 +78,31 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
-        for chunk in chunks.iter_mut() {
-            chunk.generate_mesh(&self.gpu.device);
-        }
+        let keys: Vec<_> = chunks_mut.keys().cloned().collect();
 
-        for chunk in chunks.iter().as_ref() {
-            if let Some(infos) = &chunk.infos {
-                let mdi_commands = create_mdi_commands(infos, camera_rot);
-                if let Some(mesh) = &chunk.mesh {
-                    self.gpu.queue.write_buffer(&mesh.get_indirect_buffer(), 0, bytemuck::cast_slice(&mdi_commands));
-                }
+        for key in keys {
+            if let Some(mut chunk) = chunks_mut.remove(&key) {
+                let chunk_pos_right = nalgebra_glm::vec3(key.x + 1, key.y, key.z);
+                let chunk_pos_left = nalgebra_glm::vec3(key.x - 1, key.y, key.z);
+                let chunk_pos_up = nalgebra_glm::vec3(key.x, key.y + 1, key.z);
+                let chunk_pos_down = nalgebra_glm::vec3(key.x, key.y - 1, key.z);
+                let chunk_pos_forward = nalgebra_glm::vec3(key.x, key.y, key.z + 1);
+                let chunk_pos_backward = nalgebra_glm::vec3(key.x, key.y, key.z - 1);
+
+                let nearby_chunks = [
+                    chunks_mut.get(&chunk_pos_right),
+                    chunks_mut.get(&chunk_pos_left),
+                    chunks_mut.get(&chunk_pos_up),
+                    chunks_mut.get(&chunk_pos_down),
+                    chunks_mut.get(&chunk_pos_forward),
+                    chunks_mut.get(&chunk_pos_backward),
+                ];
+                
+                let mask = chunk.chunk_mask;
+                chunk.mesh.update_data(&self.gpu.queue, &mask, &nearby_chunks);
+
+                chunks_mut
+                .insert(key, chunk);
             }
         }
 
@@ -157,7 +174,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             
-            self.scene.render(&mut render_pass, chunks, camera_rot, camera_pos, self.gpu.aspect_ratio());
+            self.scene.render(&mut render_pass, chunks_mut, camera_rot, camera_pos, self.gpu.aspect_ratio());
 
             self.egui_renderer.render(
                 &mut render_pass.forget_lifetime(),

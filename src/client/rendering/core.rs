@@ -1,4 +1,6 @@
-use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, render::{indirect::create_mdi_commands, push_constants::PushConstants, vertex::Vertex}}};
+use std::collections::HashMap;
+
+use crate::{client::rendering::renderer::Renderer, shared::{chunk::Chunk, render::{push_constants::PushConstants, vertex::Vertex}}};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 
 const QUAD_INDICES: &[u32] = &[
@@ -30,56 +32,34 @@ impl Scene {
         }
     }
 
-    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &Vec<Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32) {
+    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32) {
         renderpass.set_pipeline(&self.pipeline);
         // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
         PushConstants::update_view_projection_matrix(renderpass, camera_pos, camera_rot, aspect_ratio);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
         
-        for chunk in chunks.iter() {
-            if let Some(mesh) = &chunk.mesh {
-                let full_buffer = mesh.get_instance_points();
-                
-                renderpass.set_vertex_buffer(0, mesh.get_instance_points().slice(..));
-            
+        for chunk in chunks.values().into_iter() {
+            if let Some(buffer) = &chunk.mesh.get_instance_points() {
                 PushConstants::update_model_matrix(renderpass, chunk);
-                //renderpass.multi_draw_indexed_indirect(mesh.get_indirect_buffer(), 0, 6);
 
-                
-                // fallback:
-                if let Some(infos) = &chunk.infos {
-                    let mdi_commands = create_mdi_commands(infos, camera_rot);
-
-                    let mut i = 0;
-                    for info in infos.iter() {
-                        // if no faces then draw next
-                        if mdi_commands[i].instance_count == 0 {
-                            continue;
-                        }
-
-                        let start_byte = (info.offset as wgpu::BufferAddress) * std::mem::size_of::<Vertex>() as wgpu::BufferAddress;
-                        let end_byte = start_byte + (info.count as wgpu::BufferAddress) * std::mem::size_of::<Vertex>() as wgpu::BufferAddress;
-
-                        renderpass.set_vertex_buffer(0, full_buffer.slice(start_byte..end_byte));
-                        let index_count = 6;
-                        renderpass.draw_indexed(
-                            0..index_count,
-                            0,
-                            0..info.count,
-                        );
-
-                        i += 1;
-                    }
+                for draw_call in chunk.mesh.get_draw_calls() {
+                    let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
+                    let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
+                    renderpass.set_vertex_buffer(0, buffer.slice(start..end));
+                    renderpass.draw_indexed(
+                        0..6,
+                        0,
+                        0..draw_call.instance_count as u32,
+                    );
                 }
-                
             }
         }
     }
 
     pub fn update(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
     ) {
         // this method will be used later for the SSBO
     }

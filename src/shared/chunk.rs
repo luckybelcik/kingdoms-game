@@ -1,20 +1,14 @@
-use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{indirect::NormalGroupInfo, vertex::Vertex}};
+use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex}};
 use nalgebra_glm as glm;
 
 pub struct Chunk {
     chunk_pos: glm::IVec3,
     blocks: [u16; CHUNK_VOLUME],
-    pub mesh: Option<ChunkMesh>,
-    pub infos: Option<[NormalGroupInfo; 6]>,
-    is_dirty: bool,
-    chunk_mask: [u32; CHUNK_SIZE * CHUNK_SIZE]
+    pub mesh: ChunkMesh,
+    pub chunk_mask: [u32; CHUNK_SIZE * CHUNK_SIZE],
 }
 
 impl Chunk {
-    pub fn mark_dirty(&mut self) {
-        self.is_dirty = true;
-    }
-
     pub fn get_chunk_pos(&self) -> glm::IVec3 {
         self.chunk_pos
     }
@@ -23,9 +17,7 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [0; CHUNK_VOLUME],
-            mesh: None,
-            infos: None,
-            is_dirty: true,
+            mesh: ChunkMesh { cube_mesh: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
@@ -34,10 +26,20 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [1; CHUNK_VOLUME],
-            mesh: None,
-            infos: None,
-            is_dirty: true,
+            mesh: ChunkMesh { cube_mesh: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0xffffffff; CHUNK_SIZE * CHUNK_SIZE]
+        }
+    }
+
+    pub fn set_block(&mut self, x: usize, y: usize, z: usize, block: u16) {
+        if x < CHUNK_SIZE || y < CHUNK_SIZE || z < CHUNK_SIZE {
+            self.blocks[x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE] = block;
+            if block == 0 {
+                self.chunk_mask[y + z * CHUNK_SIZE] &= !(1 << x);
+            } else {
+                self.chunk_mask[y + z * CHUNK_SIZE] |= 1 << x;
+            }
+            self.mesh.is_dirty = true;
         }
     }
 
@@ -53,7 +55,40 @@ impl Chunk {
         &self.chunk_mask
     }
 
-    pub fn generate_mesh(&mut self, device: &wgpu::Device) -> bool {
+    pub fn generate_mesh(&mut self, device: &wgpu::Device) {
+        let vertex_buffer = wgpu::util::DeviceExt::create_buffer_init(
+            device,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Vertex Buffer"),
+                contents: bytemuck::cast_slice(&[0; 50_000]),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            },
+        );
+        
+        self.mesh.cube_mesh = Some(vertex_buffer);
+    }
+}
+
+pub struct ChunkMesh {
+    cube_mesh: Option<wgpu::Buffer>,
+    is_dirty: bool,
+    chunk_draw_call_infos: Vec<ChunkDrawCallInfo>,
+}
+
+impl ChunkMesh {
+    pub fn get_instance_points(&self) -> &Option<wgpu::Buffer> {
+        &self.cube_mesh
+    }
+
+    pub fn get_draw_calls(&self) -> &Vec<ChunkDrawCallInfo> {
+        &self.chunk_draw_call_infos
+    }
+
+    pub fn clear_draw_calls(&mut self) {
+        self.chunk_draw_call_infos.clear();
+    }
+
+    pub fn update_data(&mut self, queue: &wgpu::Queue , chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], _nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
         if self.is_dirty == false {
             return false;
         }
@@ -67,35 +102,24 @@ impl Chunk {
         let mut points_front = Vec::new();
         let mut points_back = Vec::new();
 
-        let normals: [[i8; 3]; 6] = [
-            // Right (+X)
-            [1, 0, 0],
-            // Left (-X)
-            [-1, 0, 0],
-            // Top (+Y)
-            [0, 1, 0],
-            // Bottom (-Y)
-            [0, -1, 0],
-            // Front (+Z)
-            [0, 0, 1],
-            // Back (-Z)
-            [0, 0, -1],
-        ];
+        //let neighbor_right = nearby_chunks[0];
+        //let neighbor_left  = nearby_chunks[1];
+        //let neighbor_up    = nearby_chunks[2];
+        //let neighbor_down  = nearby_chunks[3];
+        //let neighbor_front = nearby_chunks[4];
+        //let neighbor_back  = nearby_chunks[5];
 
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let current_slice = self.chunk_mask[y + z * CHUNK_SIZE];
+                let i_curr = y + z * CHUNK_SIZE;
+                let current_slice = chunk_mask[i_curr];
 
-                // Faces along +X and -X are found by shifting the bits
-                // within the slice and comparing.
                 let xplus = current_slice & !(current_slice << 1);
                 let xminus = current_slice & !(current_slice >> 1);
 
-                // Faces along +Y and -Y are found by comparing the current slice
-                // with the slices directly above and below it.
                 let yplus;
                 if y < CHUNK_SIZE - 1 {
-                    let upslice = self.chunk_mask[(y + 1) + z * CHUNK_SIZE];
+                    let upslice = chunk_mask[(y + 1) + z * CHUNK_SIZE];
                     yplus = current_slice & !upslice;
                 } else { // on chunk border, all top faces are visible
                     yplus = current_slice;
@@ -103,17 +127,15 @@ impl Chunk {
 
                 let yminus;
                 if y != 0 {
-                    let downslice = self.chunk_mask[(y - 1) + z * CHUNK_SIZE];
+                    let downslice = chunk_mask[(y - 1) + z * CHUNK_SIZE];
                     yminus = current_slice & !downslice;
                 } else { // on chunk border, all bottom faces are visible
                     yminus = current_slice;
                 }
 
-                // Faces along +Z and -Z are found by comparing the current slice
-                // with the slices in front and behind it.
                 let zplus;
                 if z < CHUNK_SIZE - 1 {
-                    let front_slice = self.chunk_mask[y + (z + 1) * CHUNK_SIZE];
+                    let front_slice = chunk_mask[y + (z + 1) * CHUNK_SIZE];
                     zplus = current_slice & !front_slice;
                 } else { // on chunk border, all front faces are visible
                     zplus = current_slice;
@@ -121,7 +143,7 @@ impl Chunk {
 
                 let zminus;
                 if z > 0 {
-                    let back_slice = self.chunk_mask[y + (z - 1) * CHUNK_SIZE];
+                    let back_slice = chunk_mask[y + (z - 1) * CHUNK_SIZE];
                     zminus = current_slice & !back_slice;
                 } else { // on chunk border, all back faces are visible
                     zminus = current_slice;
@@ -168,53 +190,49 @@ impl Chunk {
             }
         }
 
-        let mut infos = Vec::<NormalGroupInfo>::new();
+        let right_len = points_right.len();
+        let left_len = points_left.len();
+        let top_len = points_top.len();
+        let bottom_len = points_bottom.len();
+        let front_len = points_front.len();
+        let back_len = points_back.len();
 
-        let mut offset = 0;
+        let lens = [right_len, left_len, top_len, bottom_len, front_len, back_len];
+        let mut grouped_lens: Vec<Vec<usize>> = Vec::new();
+        let mut previous_was_non_zero = false;
+        let mut previous_vec_index = 0;
+
         for i in 0..6 {
-            let current_points = match i {
-                0 => {
-                    &points_right
+            if lens[i] != 0 {
+                if previous_was_non_zero {
+                    grouped_lens[previous_vec_index].push(lens[i]);
+                } else {
+                    grouped_lens.push(vec![lens[i]]);
                 }
-                1 => {
-                    &points_left
-                }
-                2 => {
-                    &points_top
-                }
-                3 => {
-                    &points_bottom
-                }
-                4 => {
-                    &points_front
-                }
-                5 => {
-                    &points_back
-                }
-                _ => {
-                    unreachable!("You shouldn't be here!")
-                }
-            };
-
-            let info = NormalGroupInfo {
-                count: current_points.len() as u32,
-                offset,
-                normal_id: i as u8,
-            };
-
-            println!("count: {}, offset: {}, normal_id: {}", info.count, info.offset, info.normal_id);
-
-            offset += current_points.len() as u32;
-            infos.push(info);
+                previous_vec_index = grouped_lens.len() - 1;
+                previous_was_non_zero = true;
+            } else {
+                previous_was_non_zero = false;
+            }
         }
 
+        // TODO! we need to make this update every frame along with what chunk faces are visible
+        let mut offset = 0;
+        let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
+        for i in 0..grouped_lens.len() {
+            let current_lems = &grouped_lens[i];
+            let summed_lens = (current_lems.iter().sum::<usize>()) as u64;
+            chunk_draw_call_infos.push(
+                ChunkDrawCallInfo {
+                    buffer_offset: offset,
+                    instance_count: summed_lens,
+            });
+            offset += summed_lens;
+        }
+
+        self.chunk_draw_call_infos = chunk_draw_call_infos;
+
         let mut points = Vec::<Vertex>::new();
-        println!("points_right: {}", points_right.len());
-        println!("points_left: {}", points_left.len());
-        println!("points_top: {}", points_top.len());
-        println!("points_bottom: {}", points_bottom.len());
-        println!("points_front: {}", points_front.len());
-        println!("points_back: {}", points_back.len());
         points.append(&mut points_right);
         points.append(&mut points_left);
         points.append(&mut points_top);
@@ -222,54 +240,10 @@ impl Chunk {
         points.append(&mut points_front);
         points.append(&mut points_back);
 
-        let vertex_buffer = wgpu::util::DeviceExt::create_buffer_init(
-            device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Vertex Buffer"),
-                contents: bytemuck::cast_slice(&points),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            },
-        );
+        println!("chunk updated");
 
-        let indirect_buffer = wgpu::util::DeviceExt::create_buffer_init(
-            device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Indirect Buffer"),
-                contents: &[0; 120],
-                usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST,
-            },
-        );
-        
-        self.mesh = Some(ChunkMesh {
-            cube_mesh: vertex_buffer,
-            indirect_buffer: indirect_buffer,
-        });
+        queue.write_buffer(&self.cube_mesh.as_ref().unwrap(), 0, bytemuck::cast_slice(&points));
 
-        self.infos = match infos.try_into() as Result<[NormalGroupInfo; 6], Vec<NormalGroupInfo>> {
-            Ok(arr) => {
-                Some(arr)
-            },
-            Err(v) => {
-                println!("Conversion failed. Original Vec length was {} but expected 6.", v.len());
-                None
-            }
-        };
-
-        return true;
-    }
-}
-
-pub struct ChunkMesh {
-    cube_mesh: wgpu::Buffer,
-    indirect_buffer: wgpu::Buffer,
-}
-
-impl ChunkMesh {
-    pub fn get_instance_points(&self) -> &wgpu::Buffer {
-        &self.cube_mesh
-    }
-
-    pub fn get_indirect_buffer(&self) -> &wgpu::Buffer {
-        &self.indirect_buffer
+        true
     }
 }

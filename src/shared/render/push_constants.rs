@@ -1,4 +1,4 @@
-use crate::shared::{chunk::Chunk, constants::CHUNK_SIZE};
+use crate::shared::{chunk::Chunk};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -19,7 +19,7 @@ impl PushConstants {
 
     #[inline(always)]
     pub fn update_model_matrix(renderpass: &mut wgpu::RenderPass<'_>, chunk: &Chunk) {
-        let model_matrix = nalgebra_glm::translate(&nalgebra_glm::Mat4::identity(), &(chunk.get_chunk_pos().map(|x| x as f32) * CHUNK_SIZE as f32));
+        let model_matrix = nalgebra_glm::translate(&nalgebra_glm::Mat4::identity(), &(chunk.get_chunk_pos().map(|x| x as f32) * 37 as f32));
         renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[model_matrix]));
     }
 

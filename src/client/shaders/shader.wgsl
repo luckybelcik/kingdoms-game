@@ -72,23 +72,28 @@ const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
 
 @vertex
 fn vertex_main(vert: VertexInput) -> VertexOutput {
+    var transparency: f32 = 1.0;
+    if vert.id == 0 {
+        transparency = 0.5;
+    }
+
     var out: VertexOutput;
     var quad_pos: vec3<f32>;
     switch vert.vertex_id {
         case 0u: {
-            out.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+            out.color = vec4<f32>(1.0, 0.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[0];
         }
         case 1u: { 
-            out.color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+            out.color = vec4<f32>(0.0, 1.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[1];
         }
         case 2u: {
-            out.color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+            out.color = vec4<f32>(0.0, 0.0, 1.0, transparency);
             quad_pos = QUAD_VERTICES[2];
         }
         case 3u: { 
-            out.color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+            out.color = vec4<f32>(0.0, 0.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[3];
         }
         default: {
