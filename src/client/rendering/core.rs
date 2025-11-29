@@ -35,13 +35,12 @@ impl Scene {
     pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32) {
         renderpass.set_pipeline(&self.pipeline);
         // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
-        PushConstants::update_view_projection_matrix(renderpass, camera_pos, camera_rot, aspect_ratio);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
         
         for chunk in chunks.values().into_iter() {
             if let Some(buffer) = &chunk.mesh.get_instance_points() {
-                PushConstants::update_model_matrix(renderpass, chunk);
+                PushConstants::update_mvp_matrix(renderpass, chunk, camera_pos, camera_rot, aspect_ratio);
 
                 for draw_call in chunk.mesh.get_draw_calls() {
                     let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;

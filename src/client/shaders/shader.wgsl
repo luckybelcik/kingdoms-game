@@ -9,8 +9,7 @@ const QUAD_VERTICES: array<vec3<f32>, 4> = array<vec3<f32>, 4>(
 //var<uniform> ubo: Uniform;
 
 struct PushConstants {
-    model: mat4x4<f32>,
-    vp: mat4x4<f32>,
+    pvm: mat4x4<f32>,
 }
 
 var<push_constant> push: PushConstants;
@@ -112,7 +111,7 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
 
     let face_transform = FACE_TRANSFORMS[index];
 
-    out.position = push.vp * push.model * (instance_local_pos + face_transform * vec4<f32>(quad_pos, 1.0));
+    out.position = push.pvm * (instance_local_pos + face_transform * vec4<f32>(quad_pos, 1.0));
     return out;
 };
 
