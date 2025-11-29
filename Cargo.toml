@@ -42,3 +42,9 @@ rustflags = ["-Z", "threads=8", "-C", "link-arg=-no-pie"]
 codegen-units = 512
 incremental = true
 opt-level = 0
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+rustflags = [
+    "-C", "link-arg=-Wl,--subsystem,console",
+]

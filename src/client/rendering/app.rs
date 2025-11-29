@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::{sync::Arc};
 use std::f32::consts::PI;
+use egui::Align2;
 use web_time::{Instant};
 use winit::{
     application::ApplicationHandler,
@@ -13,6 +14,7 @@ use winit::{
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
 use crate::client::rendering::render_results::RenderResults;
+use crate::client::rendering::ui_state::{PopupWindow, UIState, WorldSizePopupData};
 use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
@@ -24,9 +26,10 @@ pub struct App {
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub chunks: HashMap<nalgebra_glm::IVec3, Chunk>,
-    pub app_info: Option<AppInfo>,
+    pub app_info: AppInfo,
     pub app_render_config: AppRenderConfig,
-    render_results: RenderResults
+    render_results: RenderResults,
+    ui_state: UIState,
 }
 
 impl ApplicationHandler for App {
@@ -110,7 +113,7 @@ impl ApplicationHandler for App {
         app_info.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);
         app_info.camera_rot = nalgebra_glm::vec3(0.0, 0.0, 0.0);
 
-        self.app_info = Some(app_info);
+        self.app_info = app_info;
     }
 
     fn window_event(
@@ -119,28 +122,26 @@ impl ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let Some(app_info) = self.app_info.as_mut() else { return };
+        self.app_info.tick += 1;
 
-        app_info.tick += 1;
+        let total: f32 = (self.app_info.delta_history.iter().sum::<u16>()) as f32;
+        let avg_delta_time = total / (self.app_info.delta_history.len() as f32);
 
-        let total: f32 = (app_info.delta_history.iter().sum::<u16>()) as f32;
-        let avg_delta_time = total / (app_info.delta_history.len() as f32);
-
-        if app_info.tick % 10 == 0 {
+        if self.app_info.tick % 10 == 0 {
             let now = Instant::now();
-            if let Some(last) = app_info.last_render_time {
+            if let Some(last) = self.app_info.last_render_time {
                 let delta_time = now - last;
-                app_info.delta_history.push_back(delta_time.as_millis() as u16);
+                self.app_info.delta_history.push_back(delta_time.as_millis() as u16);
 
-                if app_info.delta_history.len() > 512 {
-                    app_info.delta_history.pop_front();
+                if self.app_info.delta_history.len() > 512 {
+                    self.app_info.delta_history.pop_front();
                 }
 
                 if avg_delta_time != 0.0 {
-                    app_info.avg_fps_history.push_back((1000.0 / avg_delta_time) as u16);
+                    self.app_info.avg_fps_history.push_back((1000.0 / avg_delta_time) as u16);
 
-                    if app_info.avg_fps_history.len() > 128 {
-                        app_info.avg_fps_history.pop_front();
+                    if self.app_info.avg_fps_history.len() > 128 {
+                        self.app_info.avg_fps_history.pop_front();
                     }
                 }
             }
@@ -149,9 +150,9 @@ impl ApplicationHandler for App {
         let mut lowest_fps = 0;
         let mut highest_fps = 0;
 
-        if !app_info.avg_fps_history.is_empty() {
-            lowest_fps = *app_info.avg_fps_history.iter().min().unwrap_or(&0);
-            highest_fps = *app_info.avg_fps_history.iter().max().unwrap_or(&0);
+        if !self.app_info.avg_fps_history.is_empty() {
+            lowest_fps = *self.app_info.avg_fps_history.iter().min().unwrap_or(&0);
+            highest_fps = *self.app_info.avg_fps_history.iter().max().unwrap_or(&0);
         }
 
         {
@@ -204,9 +205,7 @@ impl App {
         }
         if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key {
             if event.state == ElementState::Pressed {
-                let app_info = self.app_info.as_ref().unwrap();
-
-                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
+                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(self.app_info.camera_pos, self.app_info.camera_rot, &self.chunks) {
                     if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
                         log::info!("Break block at {} {} {}", x, y, z);
                         chunk.set_block(x, y, z, 0);
@@ -216,9 +215,7 @@ impl App {
         }
         if let PhysicalKey::Code(KeyCode::Period) = event.physical_key {
             if event.state == ElementState::Pressed {
-                let app_info = self.app_info.as_ref().unwrap();
-
-                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
+                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(self.app_info.camera_pos, self.app_info.camera_rot, &self.chunks) {
                     if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
                         log::info!("Place block at {} {} {}", x, y, z);
                         chunk.set_block(x, y, z, 1);
@@ -234,12 +231,12 @@ impl App {
     }
 
     fn handle_resize(&mut self, new_size: PhysicalSize<u32>) {
-        let (Some(renderer), Some(app_info)) = (self.renderer.as_mut(), self.app_info.as_mut()) else { return };
+        let Some(renderer) = self.renderer.as_mut() else { return };
 
         if new_size.width > 0 && new_size.height > 0 {
             log::info!("Resizing renderer surface to: ({}, {})", new_size.width, new_size.height);
             renderer.resize(new_size.width, new_size.height);
-            app_info.last_size = (new_size.width, new_size.height);
+            self.app_info.last_size = (new_size.width, new_size.height);
         }
     }
 
@@ -247,53 +244,46 @@ impl App {
         const TICK_RATE: u32 = 60;
         const FIXED_TIMESTEP: f64 = 1.0 / TICK_RATE as f64;
 
-        {
-            let mut accumulator;
-            let delta_time;
-            let now;
+        let now = Instant::now();
+        let delta_time = now - self.app_info.last_render_time.unwrap();
 
-            // we have to do the client tick in this scope to respect borrowing rules
-            {
-                let Some(app_info) = self.app_info.as_mut() else { return };
-                now = Instant::now();
-                delta_time = now - app_info.last_render_time.unwrap();
+        let mut accumulator = self.app_info.accumulator;
+        accumulator += delta_time.as_secs_f64();
 
-                accumulator = app_info.accumulator;
-                accumulator += delta_time.as_secs_f64();
-
-                while accumulator >= FIXED_TIMESTEP {
-                    self.handle_client_tick(FIXED_TIMESTEP as f32);
-                    accumulator -= FIXED_TIMESTEP;
-                }
-            }
-
-            let Some(app_info) = self.app_info.as_mut() else { return };
-            app_info.accumulator = accumulator;
-            app_info.last_render_time = Some(now);
-
-            self.update_camera(delta_time.as_secs_f32());
+        while accumulator >= FIXED_TIMESTEP {
+            self.handle_client_tick(FIXED_TIMESTEP as f32);
+            accumulator -= FIXED_TIMESTEP;
         }
 
-        let (Some(gui_state), Some(renderer), Some(window), Some(app_info)) = (
-            self.gui_state.as_mut(),
-            self.renderer.as_mut(),
-            self.window.as_ref(),
-            self.app_info.as_mut(),
-        ) else {
-            return;
-        };
+        self.app_info.accumulator = accumulator;
+        self.app_info.last_render_time = Some(now);
 
-        let gui_input = gui_state.take_egui_input(window);
-        gui_state.egui_ctx().begin_pass(gui_input);
+        self.update_camera(delta_time.as_secs_f32());
+
+        let gui_input;
+        {
+            if let (Some(gui_state), Some(window)) = (self.gui_state.as_mut(), self.window.as_mut()) {
+                gui_input = gui_state.take_egui_input(window);
+                gui_state.egui_ctx().begin_pass(gui_input);
+            } else {
+                return;
+            }
+        }
 
         draw_ui(
-            gui_state.egui_ctx(),
+            self,
             avg_delta_time,
             highest_fps,
             lowest_fps,
-            app_info,
-            &mut self.render_results,
         );
+
+        let (Some(gui_state), Some(renderer), Some(window)) = (
+            self.gui_state.as_mut(),
+            self.renderer.as_mut(),
+            self.window.as_ref(),
+        ) else {
+            return;
+        };
 
         let egui::FullOutput {
             textures_delta,
@@ -308,7 +298,7 @@ impl App {
         let paint_jobs = gui_state.egui_ctx().tessellate(shapes, pixels_per_point);
 
         let screen_descriptor = {
-            let (width, height) = app_info.last_size;
+            let (width, height) = self.app_info.last_size;
             if width == 0 || height == 0 {
                 return;
             }
@@ -323,104 +313,85 @@ impl App {
             paint_jobs,
             textures_delta,
             &mut self.chunks,
-            app_info.camera_pos,
-            app_info.camera_rot,
+            self.app_info.camera_pos,
+            self.app_info.camera_rot,
             &self.app_render_config,
         );
     }
 
     fn handle_client_tick(&mut self, _delta_seconds: f32) {
-        let Some(app_info) = self.app_info.as_mut() else {
-            return;
-        };
+        self.app_info.chunk_count = self.chunks.len() as u64;
 
-        app_info.chunk_count = self.chunks.len() as u64;
-
-        if app_info.chunk_count > 0 && app_info.total_chunk_vram > 0 {
-            app_info.chunk_count = self.chunks.len() as u64;
-            app_info.avg_chunk_vram = app_info.total_chunk_vram / app_info.chunk_count as u64;
+        if self.app_info.chunk_count > 0 && self.app_info.total_chunk_vram > 0 {
+            self.app_info.chunk_count = self.chunks.len() as u64;
+            self.app_info.avg_chunk_vram = self.app_info.total_chunk_vram / self.app_info.chunk_count as u64;
         }
     }
 
     fn update_camera(&mut self, delta_seconds: f32) {
-        let Some(app_info) = self.app_info.as_mut() else { return };
-
         let move_speed = 20.0 * delta_seconds;
         let rotation_speed = 2.0 * delta_seconds;
 
         // Rotation
         if self.pressed_keys.contains(&KeyCode::ArrowUp) {
-            app_info.camera_rot.x += rotation_speed;
+            self.app_info.camera_rot.x += rotation_speed;
         }
         if self.pressed_keys.contains(&KeyCode::ArrowDown) {
-            app_info.camera_rot.x -= rotation_speed;
+            self.app_info.camera_rot.x -= rotation_speed;
         }
         if self.pressed_keys.contains(&KeyCode::ArrowLeft) {
-            app_info.camera_rot.y += rotation_speed;
+            self.app_info.camera_rot.y += rotation_speed;
         }
         if self.pressed_keys.contains(&KeyCode::ArrowRight) {
-            app_info.camera_rot.y -= rotation_speed;
+            self.app_info.camera_rot.y -= rotation_speed;
         }
         // Clamp pitch
-        app_info.camera_rot.x = app_info.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
+        self.app_info.camera_rot.x = self.app_info.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
         // Movement
-        let (sin_y, cos_y) = app_info.camera_rot.y.sin_cos();
+        let (sin_y, cos_y) = self.app_info.camera_rot.y.sin_cos();
         if self.pressed_keys.contains(&KeyCode::KeyW) {
-            app_info.camera_pos.x += cos_y * move_speed;
-            app_info.camera_pos.z += sin_y * move_speed;
+            self.app_info.camera_pos.x += cos_y * move_speed;
+            self.app_info.camera_pos.z += sin_y * move_speed;
         }
         if self.pressed_keys.contains(&KeyCode::KeyS) {
-            app_info.camera_pos.x -= cos_y * move_speed;
-            app_info.camera_pos.z -= sin_y * move_speed;
+            self.app_info.camera_pos.x -= cos_y * move_speed;
+            self.app_info.camera_pos.z -= sin_y * move_speed;
         }
         if self.pressed_keys.contains(&KeyCode::KeyA) {
-            app_info.camera_pos.x -= sin_y * move_speed;
-            app_info.camera_pos.z += cos_y * move_speed;
+            self.app_info.camera_pos.x -= sin_y * move_speed;
+            self.app_info.camera_pos.z += cos_y * move_speed;
         }
         if self.pressed_keys.contains(&KeyCode::KeyD) {
-            app_info.camera_pos.x += sin_y * move_speed;
-            app_info.camera_pos.z -= cos_y * move_speed;
+            self.app_info.camera_pos.x += sin_y * move_speed;
+            self.app_info.camera_pos.z -= cos_y * move_speed;
         }
         if self.pressed_keys.contains(&KeyCode::Space) {
-            app_info.camera_pos.y += move_speed;
+            self.app_info.camera_pos.y += move_speed;
         }
         if self.pressed_keys.contains(&KeyCode::ShiftLeft) {
-            app_info.camera_pos.y -= move_speed;
+            self.app_info.camera_pos.y -= move_speed;
         }
     }
 }
 
 fn draw_ui(
-    ctx: &egui::Context,
+    app: &mut App,
     avg_delta_time: f32,
     highest_fps: u16,
     lowest_fps: u16,
-    app_info: &mut AppInfo,
-    render_results: &mut RenderResults,
 ) {
+    let ctx = app.gui_state.as_mut().unwrap().egui_ctx();
     let title = "Rust/Wgpu";
     egui::TopBottomPanel::top("top").show(ctx, |ui| {
         ui.horizontal(|ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Load").clicked() {
+                ui.menu_button("World", |ui| {
+                    if ui.button("Regenerate Chunks").clicked() {
                         ui.close();
                     }
-                    if ui.button("Save").clicked() {
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Import").clicked() {
-                        ui.close();
-                    }
-                });
-
-                ui.menu_button("Edit", |ui| {
-                    if ui.button("Clear").clicked() {
-                        ui.close();
-                    }
-                    if ui.button("Reset").clicked() {
+                    if ui.button("Change World Size").clicked() {
+                        app.ui_state.toggle_popup(PopupWindow::WorldSize(WorldSizePopupData::default()));
                         ui.close();
                     }
                 });
@@ -463,27 +434,55 @@ fn draw_ui(
 
         ui.heading("Debug Info");
 
-        let memory_per_chunk = if render_results.chunk_count > 0 {
-            render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32 / render_results.chunk_count
+        let memory_per_chunk = if app.render_results.chunk_count > 0 {
+            app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32 / app.render_results.chunk_count
         } else {
             0
         };
 
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            ui.label(egui::RichText::new(format!("window size: {}x {}y", app_info.last_size.0, app_info.last_size.1)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("total triangles: {}", render_results.triangles_rendered)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("chunk vram footprint: {}", render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("window size: {}x {}y", app.app_info.last_size.0, app.app_info.last_size.1)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("total triangles: {}", app.render_results.triangles_rendered)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("chunk vram footprint: {}", app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("memory per chunk: {}", memory_per_chunk)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new("warning, the memory amount above takes both vertices and indices into consideration").color(egui::Color32::GRAY).small());
-            ui.label(egui::RichText::new(format!("chunks: {}", render_results.chunk_count)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("chunks update count: {}", app_info.chunk_updates)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("draw calls: {}", render_results.draw_calls)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app_info.camera_pos.x, app_info.camera_pos.y, app_info.camera_pos.z)).color(egui::Color32::LIGHT_BLUE));
-            ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app_info.camera_rot.x.to_degrees(), app_info.camera_rot.y.to_degrees())).color(egui::Color32::LIGHT_BLUE));
+            ui.label(egui::RichText::new(format!("chunks: {}", app.render_results.chunk_count)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("chunks update count: {}", app.app_info.chunk_updates)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("draw calls: {}", app.render_results.draw_calls)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app.app_info.camera_pos.x, app.app_info.camera_pos.y, app.app_info.camera_pos.z)).color(egui::Color32::LIGHT_BLUE));
+            ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app.app_info.camera_rot.x.to_degrees(), app.app_info.camera_rot.y.to_degrees())).color(egui::Color32::LIGHT_BLUE));
         });
     });
 
     egui::TopBottomPanel::bottom("Console").show(ctx, |ui| {
         ui.heading("Console");
     });
+
+    let mut state_to_set_to: Option<PopupWindow> = None;
+
+    match &mut app.ui_state.popup_window {
+        PopupWindow::None => {},
+        PopupWindow::WorldSize(popup_data) => {
+            egui::Window::new("World Size").anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO).resizable(false).collapsible(false).show(ctx, |ui| {
+                ui.label(egui::RichText::new("meow").color(egui::Color32::LIGHT_GREEN));
+
+                ui.add(egui::DragValue::new(&mut popup_data.size).prefix("Chunk area: ").range(0..=32).clamp_existing_to_range(true));
+
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                        if ui.button("Save").clicked() {
+                            state_to_set_to = Some(PopupWindow::None);
+                        }
+                        if ui.button("Close").clicked() {
+                            state_to_set_to = Some(PopupWindow::None);
+                        }
+                    });
+                });
+            });
+        }
+    }
+
+    if let Some(state) = state_to_set_to {
+        app.ui_state.popup_window = state;
+    }
 }
