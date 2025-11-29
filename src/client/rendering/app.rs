@@ -12,7 +12,9 @@ use winit::{
 
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
+use crate::client::rendering::render_results::RenderResults;
 use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
+use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
 #[derive(Default)]
@@ -23,7 +25,8 @@ pub struct App {
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub chunks: HashMap<nalgebra_glm::IVec3, Chunk>,
     pub app_info: Option<AppInfo>,
-    pub app_render_config: AppRenderConfig
+    pub app_render_config: AppRenderConfig,
+    render_results: RenderResults
 }
 
 impl ApplicationHandler for App {
@@ -289,6 +292,7 @@ impl App {
             highest_fps,
             lowest_fps,
             app_info,
+            &mut self.render_results,
         );
 
         let egui::FullOutput {
@@ -314,7 +318,7 @@ impl App {
             }
         };
 
-        renderer.render_frame(
+        self.render_results = renderer.render_frame(
             screen_descriptor,
             paint_jobs,
             textures_delta,
@@ -393,6 +397,7 @@ fn draw_ui(
     highest_fps: u16,
     lowest_fps: u16,
     app_info: &mut AppInfo,
+    render_results: &mut RenderResults,
 ) {
     let title = "Rust/Wgpu";
     egui::TopBottomPanel::top("top").show(ctx, |ui| {
@@ -458,13 +463,21 @@ fn draw_ui(
 
         ui.heading("Debug Info");
 
+        let memory_per_chunk = if render_results.chunk_count > 0 {
+            render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32 / render_results.chunk_count
+        } else {
+            0
+        };
+
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
             ui.label(egui::RichText::new(format!("window size: {}x {}y", app_info.last_size.0, app_info.last_size.1)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("chunk vram footprint: {}", app_info.total_chunk_vram)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("memory per chunk: {}", app_info.avg_chunk_vram)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("total triangles: {}", render_results.triangles_rendered)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("chunk vram footprint: {}", render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("memory per chunk: {}", memory_per_chunk)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new("warning, the memory amount above takes both vertices and indices into consideration").color(egui::Color32::GRAY).small());
-            ui.label(egui::RichText::new(format!("chunks: {}", app_info.chunk_count)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("chunks: {}", render_results.chunk_count)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunks update count: {}", app_info.chunk_updates)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("draw calls: {}", render_results.draw_calls)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app_info.camera_pos.x, app_info.camera_pos.y, app_info.camera_pos.z)).color(egui::Color32::LIGHT_BLUE));
             ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app_info.camera_rot.x.to_degrees(), app_info.camera_rot.y.to_degrees())).color(egui::Color32::LIGHT_BLUE));
         });

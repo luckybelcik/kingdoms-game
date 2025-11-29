@@ -4,4 +4,5 @@ mod renderer;
 mod core;
 mod appinfo;
 pub mod apprenderconfig;
+mod render_results;
 mod util;

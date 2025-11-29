@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu}, shared::chunk::Chunk};
+use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults}, shared::chunk::Chunk};
 
 pub struct Renderer {
     gpu: Gpu,
@@ -58,7 +58,7 @@ impl Renderer {
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,
         render_config: &AppRenderConfig,
-    ) {
+    ) -> RenderResults {
         self.scene.update(
             &self.gpu.queue,
         );
@@ -146,6 +146,8 @@ impl Renderer {
 
         encoder.insert_debug_marker("Render scene");
 
+        let results: RenderResults;
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -175,7 +177,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             
-            self.scene.render(&mut render_pass, chunks_mut, camera_rot, camera_pos, self.gpu.aspect_ratio(), render_config);
+            results = self.scene.render(&mut render_pass, chunks_mut, camera_rot, camera_pos, self.gpu.aspect_ratio(), render_config);
 
             self.egui_renderer.render(
                 &mut render_pass.forget_lifetime(),
@@ -186,5 +188,7 @@ impl Renderer {
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
+
+        results
     }
 }
