@@ -14,7 +14,7 @@ use winit::{
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
 use crate::client::rendering::render_results::RenderResults;
-use crate::client::rendering::ui_state::{PopupWindow, UIState, WorldSizePopupData};
+use crate::client::rendering::ui_state::{PopupWindow, RenderConfigData, UIState, WorldSizePopupData};
 use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
@@ -395,6 +395,11 @@ fn draw_ui(
                         ui.close();
                     }
                 });
+                ui.separator();
+
+                if ui.button("Render Config").clicked() {
+                    app.ui_state.toggle_popup(PopupWindow::RenderConfig(RenderConfigData::new(&app.app_render_config)));
+                }
 
                 ui.separator();
                 ui.label(egui::RichText::new(title).color(egui::Color32::LIGHT_GREEN));
@@ -464,13 +469,28 @@ fn draw_ui(
         PopupWindow::None => {},
         PopupWindow::WorldSize(popup_data) => {
             egui::Window::new("World Size").anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO).resizable(false).collapsible(false).show(ctx, |ui| {
-                ui.label(egui::RichText::new("meow").color(egui::Color32::LIGHT_GREEN));
-
                 ui.add(egui::DragValue::new(&mut popup_data.size).prefix("Chunk area: ").range(0..=32).clamp_existing_to_range(true));
 
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                         if ui.button("Save").clicked() {
+                            state_to_set_to = Some(PopupWindow::None);
+                        }
+                        if ui.button("Close").clicked() {
+                            state_to_set_to = Some(PopupWindow::None);
+                        }
+                    });
+                });
+            });
+        }
+        PopupWindow::RenderConfig(popup_data) => {
+            egui::Window::new("Render Config").anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO).resizable(false).collapsible(false).show(ctx, |ui| {
+                ui.checkbox(&mut popup_data.render_textures, "Block Visuals");
+
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                        if ui.button("Save").clicked() {
+                            app.app_render_config.set_render_textures_bit(popup_data.render_textures);
                             state_to_set_to = Some(PopupWindow::None);
                         }
                         if ui.button("Close").clicked() {
