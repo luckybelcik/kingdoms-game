@@ -11,8 +11,7 @@ use winit::{
 };
 
 use crate::client::rendering::appinfo::AppInfo;
-use crate::client::rendering::util::cast_ray_block_hit;
-use crate::shared::constants::CHUNK_SIZE;
+use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
 #[derive(Default)]
@@ -203,7 +202,18 @@ impl App {
 
             if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
                 if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+                    log::info!("Break block at {} {} {}", x, y, z);
                     chunk.set_block(x, y, z, 0);
+                }
+            }
+        }
+        if let PhysicalKey::Code(KeyCode::Period) = event.physical_key {
+            let app_info = self.app_info.as_ref().unwrap();
+
+            if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(app_info.camera_pos, app_info.camera_rot, &self.chunks) {
+                if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+                    log::info!("Place block at {} {} {}", x, y, z);
+                    chunk.set_block(x, y, z, 1);
                 }
             }
         }
