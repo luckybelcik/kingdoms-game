@@ -90,8 +90,10 @@ impl ApplicationHandler for App {
         // first, generate chunks
         for i in 0..CHUNKS_SQUARED {
             for j in 0..CHUNKS_SQUARED {
-                let chunk = Chunk::new_full(i, 0, j);
-                chunks.insert(nalgebra_glm::vec3(i, 0, j), chunk);
+                for k in 0..CHUNKS_SQUARED {
+                    let chunk = Chunk::new_full(i, k, j);
+                    chunks.insert(nalgebra_glm::vec3(i, k, j), chunk);
+                }
             }
         }
 
@@ -99,10 +101,12 @@ impl ApplicationHandler for App {
         if let Some(renderer) = &self.renderer {
             for i in 0..CHUNKS_SQUARED {
                 for j in 0..CHUNKS_SQUARED {
-                    let pos = nalgebra_glm::vec3(i, 0, j);
-                    if let Some(mut chunk) = chunks.remove(&pos) {
-                        (&mut chunk).generate_mesh(&renderer.get_gpu().device);
-                        chunks.insert(nalgebra_glm::vec3(i, 0, j), chunk);
+                    for k in 0..CHUNKS_SQUARED {
+                        let pos = nalgebra_glm::vec3(i, k, j);
+                        if let Some(mut chunk) = chunks.remove(&pos) {
+                            (&mut chunk).generate_mesh(&renderer.get_gpu().device);
+                            chunks.insert(nalgebra_glm::vec3(i, k, j), chunk);
+                        }
                     }
                 }
             }

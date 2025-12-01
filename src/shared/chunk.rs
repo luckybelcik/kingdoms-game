@@ -88,7 +88,7 @@ impl ChunkMesh {
         self.chunk_draw_call_infos.clear();
     }
 
-    pub fn update_data(&mut self, queue: &wgpu::Queue , chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], _nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
+    pub fn update_data(&mut self, queue: &wgpu::Queue , chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
         if self.is_dirty == false {
             return false;
         }
@@ -102,51 +102,81 @@ impl ChunkMesh {
         let mut points_front = Vec::new();
         let mut points_back = Vec::new();
 
-        //let neighbor_right = nearby_chunks[0];
-        //let neighbor_left  = nearby_chunks[1];
-        //let neighbor_up    = nearby_chunks[2];
-        //let neighbor_down  = nearby_chunks[3];
-        //let neighbor_front = nearby_chunks[4];
-        //let neighbor_back  = nearby_chunks[5];
+        let neighbor_right = nearby_chunks[0];
+        let neighbor_left  = nearby_chunks[1];
+        let neighbor_up    = nearby_chunks[2];
+        let neighbor_down  = nearby_chunks[3];
+        let neighbor_front = nearby_chunks[4];
+        let neighbor_back  = nearby_chunks[5];
 
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 let i_curr = y + z * CHUNK_SIZE;
                 let current_slice = chunk_mask[i_curr];
 
-                let xplus = current_slice & !(current_slice << 1);
-                let xminus = current_slice & !(current_slice >> 1);
+                let xplus;
+                let xminus;
+                if let Some(n_left) = neighbor_left {
+                    xplus = (current_slice & !(current_slice << 1)) & !(n_left.chunk_mask[i_curr] >> 31);
+                } else {
+                    xplus = current_slice & !(current_slice << 1);
+                }
+                if let Some(n_right) = neighbor_right {
+                    xminus = (current_slice & !(current_slice >> 1)) & !(n_right.chunk_mask[i_curr] << 31);
+                } else {
+                    xminus = current_slice & !(current_slice >> 1);
+                }
 
                 let yplus;
                 if y < CHUNK_SIZE - 1 {
                     let upslice = chunk_mask[(y + 1) + z * CHUNK_SIZE];
                     yplus = current_slice & !upslice;
-                } else { // on chunk border, all top faces are visible
-                    yplus = current_slice;
+                } else { // chunk border top
+                    if let Some(n_top) = neighbor_up {
+                        let neighbor_slice = n_top.chunk_mask[0 + z * CHUNK_SIZE];
+                        yplus = current_slice & !neighbor_slice;
+                    } else {
+                        yplus = current_slice;
+                    }
                 }
 
                 let yminus;
                 if y != 0 {
                     let downslice = chunk_mask[(y - 1) + z * CHUNK_SIZE];
                     yminus = current_slice & !downslice;
-                } else { // on chunk border, all bottom faces are visible
-                    yminus = current_slice;
+                } else { // chunk border bottom
+                    if let Some(n_bottom) = neighbor_down {
+                        let neighbor_slice = n_bottom.chunk_mask[CHUNK_SIZE - 1 + z * CHUNK_SIZE];
+                        yminus = current_slice & !neighbor_slice;
+                    } else {
+                        yminus = current_slice;
+                    }
                 }
 
                 let zplus;
                 if z < CHUNK_SIZE - 1 {
                     let front_slice = chunk_mask[y + (z + 1) * CHUNK_SIZE];
                     zplus = current_slice & !front_slice;
-                } else { // on chunk border, all front faces are visible
-                    zplus = current_slice;
+                } else { // chunk border front
+                    if let Some(n_front) = neighbor_front {
+                        let neighbor_slice = n_front.chunk_mask[y + 0];
+                        zplus = current_slice & !neighbor_slice;
+                    } else {
+                        zplus = current_slice;
+                    }
                 }
 
                 let zminus;
                 if z > 0 {
                     let back_slice = chunk_mask[y + (z - 1) * CHUNK_SIZE];
                     zminus = current_slice & !back_slice;
-                } else { // on chunk border, all back faces are visible
-                    zminus = current_slice;
+                } else { // chunk border back
+                    if let Some(n_back) = neighbor_back {
+                        let neighbor_slice = n_back.chunk_mask[y + CHUNK_SIZE - 1];
+                        zminus = current_slice & !neighbor_slice;
+                    } else {
+                        zminus = current_slice;
+                    }
                 }
 
                 for i in 0..32 {
