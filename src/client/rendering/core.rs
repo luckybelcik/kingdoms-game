@@ -46,7 +46,13 @@ impl Scene {
             if let Some(buffer) = &chunk.mesh.get_instance_points() {
                 PushConstants::update_mvp_matrix(renderpass, chunk, camera_pos, camera_rot, aspect_ratio);
 
-                let draw_calls = chunk.mesh.get_visible_draw_calls(camera_pos, chunk.get_chunk_pos());
+                let mut draw_calls = chunk.mesh.get_draw_calls();
+                let culled_calls = chunk.mesh.get_visible_draw_calls(camera_pos, chunk.get_chunk_pos());
+
+                if render_config.get_cull_chunk_faces_bit() {
+                    draw_calls = &culled_calls;
+                }
+
                 for draw_call in draw_calls {
                     let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
                     let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;

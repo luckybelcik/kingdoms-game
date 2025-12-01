@@ -9,7 +9,7 @@ pub struct PushConstants {
 
 pub const PUSH_CONSTANTS_SIZE: u32 = std::mem::size_of::<PushConstants>() as u32;
 pub const ARG_1_SIZE: u32 = std::mem::size_of::<nalgebra_glm::Mat4>() as u32;
-pub const ARG_2_SIZE: u32 = std::mem::size_of::<AppRenderConfig>() as u32;
+pub const ARG_2_SIZE: u32 = std::mem::size_of::<u32>() as u32;
 
 impl PushConstants {
     pub fn get_range() -> wgpu::PushConstantRange {
@@ -29,7 +29,7 @@ impl PushConstants {
 
     #[inline(always)]
     pub fn update_render_config(renderpass: &mut wgpu::RenderPass<'_>, render_config: &AppRenderConfig) {
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[*render_config]));
+        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[render_config.push_constant_data]));
     }
 }
 

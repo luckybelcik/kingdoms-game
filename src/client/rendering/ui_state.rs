@@ -31,10 +31,11 @@ pub struct WorldSizePopupData {
 #[derive(Default)]
 pub struct RenderConfigData {
     pub render_textures: bool,
+    pub cull_chunk_faces: bool,
 }
 
 impl RenderConfigData {
     pub fn new(config: &AppRenderConfig) -> Self {
-        RenderConfigData { render_textures: config.get_render_textures_bit() }
+        RenderConfigData { render_textures: config.get_render_textures_bit(), cull_chunk_faces: config.get_cull_chunk_faces_bit() }
     }
 }

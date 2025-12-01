@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{sync::Arc};
 use std::f32::consts::PI;
-use egui::Align2;
+use egui::{Align2, Color32};
 use web_time::{Instant};
 use winit::{
     application::ApplicationHandler,
@@ -488,12 +488,17 @@ fn draw_ui(
         }
         PopupWindow::RenderConfig(popup_data) => {
             egui::Window::new("Render Config").anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO).resizable(false).collapsible(false).show(ctx, |ui| {
+                ui.label(egui::RichText::new("Push Constant Config").size(10.0).color(Color32::GOLD));
                 ui.checkbox(&mut popup_data.render_textures, "Block Visuals");
+
+                ui.label(egui::RichText::new("Bool Config").size(10.0).color(Color32::GOLD));
+                ui.checkbox(&mut popup_data.cull_chunk_faces, "Cull Chunk Faces");
 
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                         if ui.button("Save").clicked() {
                             app.app_render_config.set_render_textures_bit(popup_data.render_textures);
+                            app.app_render_config.set_cull_chunk_faces_bit(popup_data.cull_chunk_faces);
                             state_to_set_to = Some(PopupWindow::None);
                         }
                         if ui.button("Close").clicked() {
