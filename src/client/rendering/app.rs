@@ -19,6 +19,10 @@ use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
+const CHUNKS_WIDTH: i32 = 8;
+const CHUNKS_LENGTH: i32 = 8;
+const CHUNKS_HEIGHT: i32 = 1;
+
 #[derive(Default)]
 pub struct App {
     window: Option<Arc<Window>>,
@@ -86,11 +90,10 @@ impl ApplicationHandler for App {
         app_info.last_render_time = Some(Instant::now());
 
         let mut chunks = HashMap::<nalgebra_glm::IVec3, Chunk>::new();
-        const CHUNKS_SQUARED: i32 = 3;
         // first, generate chunks
-        for i in 0..CHUNKS_SQUARED {
-            for j in 0..CHUNKS_SQUARED {
-                for k in 0..CHUNKS_SQUARED {
+        for i in 0..CHUNKS_WIDTH {
+            for j in 0..CHUNKS_LENGTH {
+                for k in 0..CHUNKS_HEIGHT {
                     let chunk = Chunk::new_full(i, k, j);
                     chunks.insert(nalgebra_glm::vec3(i, k, j), chunk);
                 }
@@ -99,9 +102,9 @@ impl ApplicationHandler for App {
 
         // then generate meshes
         if let Some(renderer) = &self.renderer {
-            for i in 0..CHUNKS_SQUARED {
-                for j in 0..CHUNKS_SQUARED {
-                    for k in 0..CHUNKS_SQUARED {
+            for i in 0..CHUNKS_WIDTH {
+                for j in 0..CHUNKS_LENGTH {
+                    for k in 0..CHUNKS_HEIGHT {
                         let pos = nalgebra_glm::vec3(i, k, j);
                         if let Some(mut chunk) = chunks.remove(&pos) {
                             (&mut chunk).reserve_mesh_space(&renderer.get_gpu().device);
