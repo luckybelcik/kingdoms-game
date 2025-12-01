@@ -55,7 +55,7 @@ impl Chunk {
         &self.chunk_mask
     }
 
-    pub fn generate_mesh(&mut self, device: &wgpu::Device) {
+    pub fn reserve_mesh_space(&mut self, device: &wgpu::Device) {
         let vertex_buffer = wgpu::util::DeviceExt::create_buffer_init(
             device,
             &wgpu::util::BufferInitDescriptor {
@@ -88,7 +88,7 @@ impl ChunkMesh {
         self.chunk_draw_call_infos.clear();
     }
 
-    pub fn update_data(&mut self, queue: &wgpu::Queue , chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
+    pub fn update_mesh(&mut self, queue: &wgpu::Queue , chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
         if self.is_dirty == false {
             return false;
         }
@@ -228,37 +228,22 @@ impl ChunkMesh {
         let back_len = points_back.len();
 
         let lens = [right_len, left_len, top_len, bottom_len, front_len, back_len];
-        let mut grouped_lens: Vec<Vec<usize>> = Vec::new();
-        let mut previous_was_non_zero = false;
-        let mut previous_vec_index = 0;
 
-        for i in 0..6 {
-            if lens[i] != 0 {
-                if previous_was_non_zero {
-                    grouped_lens[previous_vec_index].push(lens[i]);
-                } else {
-                    grouped_lens.push(vec![lens[i]]);
-                }
-                previous_vec_index = grouped_lens.len() - 1;
-                previous_was_non_zero = true;
-            } else {
-                previous_was_non_zero = false;
-            }
-        }
-
-        // TODO! we need to make this update every frame along with what chunk faces are visible
         let mut offset = 0;
         let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
-        for i in 0..grouped_lens.len() {
-            let current_lems = &grouped_lens[i];
-            let summed_lens = (current_lems.iter().sum::<usize>()) as u64;
+        for i in 0..lens.len() {
+            let current_len = lens[i];
+            let len_64 = current_len as u64;
             chunk_draw_call_infos.push(
                 ChunkDrawCallInfo {
                     buffer_offset: offset,
-                    instance_count: summed_lens,
+                    instance_count: len_64,
+                    visible: true,
             });
-            offset += summed_lens;
+            offset += len_64;
         }
+
+        println!("draw call info: {:?}", chunk_draw_call_infos);
 
         self.chunk_draw_call_infos = chunk_draw_call_infos;
 
@@ -275,5 +260,57 @@ impl ChunkMesh {
         queue.write_buffer(&self.cube_mesh.as_ref().unwrap(), 0, bytemuck::cast_slice(&points));
 
         true
+    }
+
+    pub fn get_visible_draw_calls(&self, camera_pos: glm::Vec3, chunk_pos: glm::IVec3) -> Vec<ChunkDrawCallInfo> {
+        let mut face_visible = [true; 6];
+
+        let cam_chunk_pos_x = ((camera_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+        let cam_chunk_pos_y = ((camera_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+        let cam_chunk_pos_z = ((camera_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+
+        if cam_chunk_pos_x > chunk_pos.x {
+            face_visible[0] = false;
+        }
+        if cam_chunk_pos_x < chunk_pos.x {
+            face_visible[1] = false;
+        }
+        if cam_chunk_pos_y < chunk_pos.y {
+            face_visible[2] = false;
+        }
+        if cam_chunk_pos_y > chunk_pos.y {
+            face_visible[3] = false;
+        }
+        if cam_chunk_pos_z < chunk_pos.z {
+            face_visible[4] = false;
+        }
+        if cam_chunk_pos_z > chunk_pos.z {
+            face_visible[5] = false;
+        }
+
+        let draw_infos_with_visibility = self.chunk_draw_call_infos.iter().enumerate().map(|(i, info)| {
+            let mut new_info = ChunkDrawCallInfo {
+                buffer_offset: info.buffer_offset,
+                instance_count: info.instance_count,
+                visible: info.visible,
+            };
+            new_info.visible = face_visible[i];
+            new_info
+        }).collect::<Vec<_>>();
+
+        let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
+
+        for info in draw_infos_with_visibility {
+            if info.visible {
+                chunk_draw_call_infos.push(
+                    ChunkDrawCallInfo {
+                        buffer_offset: info.buffer_offset,
+                        instance_count: info.instance_count,
+                        visible: true,
+                });
+            }
+        }
+
+        chunk_draw_call_infos
     }
 }

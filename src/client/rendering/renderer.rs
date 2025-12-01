@@ -100,7 +100,7 @@ impl Renderer {
                 ];
                 
                 let mask = chunk.chunk_mask;
-                chunk.mesh.update_data(&self.gpu.queue, &mask, &nearby_chunks);
+                chunk.mesh.update_mesh(&self.gpu.queue, &mask, &nearby_chunks);
 
                 chunks_mut
                 .insert(key, chunk);

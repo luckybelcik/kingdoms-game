@@ -32,7 +32,7 @@ impl Scene {
         }
     }
 
-    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
+    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &mut HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
         -> RenderResults {
         renderpass.set_pipeline(&self.pipeline);
         // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
@@ -41,15 +41,22 @@ impl Scene {
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
 
         let mut results = RenderResults::default();
-        
+
         for chunk in chunks.values().into_iter() {
             if let Some(buffer) = &chunk.mesh.get_instance_points() {
                 PushConstants::update_mvp_matrix(renderpass, chunk, camera_pos, camera_rot, aspect_ratio);
 
-                for draw_call in chunk.mesh.get_draw_calls() {
+                let draw_calls = chunk.mesh.get_visible_draw_calls(camera_pos, chunk.get_chunk_pos());
+                for draw_call in draw_calls {
                     let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
                     let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
-                    renderpass.set_vertex_buffer(0, buffer.slice(start..end));
+                    let slice = start..end;
+
+                    if start >= end { // next iteration if nothing to draw
+                        continue;
+                    }
+
+                    renderpass.set_vertex_buffer(0, buffer.slice(slice));
                     renderpass.draw_indexed(
                         0..6,
                         0,

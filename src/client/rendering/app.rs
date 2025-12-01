@@ -104,7 +104,7 @@ impl ApplicationHandler for App {
                     for k in 0..CHUNKS_SQUARED {
                         let pos = nalgebra_glm::vec3(i, k, j);
                         if let Some(mut chunk) = chunks.remove(&pos) {
-                            (&mut chunk).generate_mesh(&renderer.get_gpu().device);
+                            (&mut chunk).reserve_mesh_space(&renderer.get_gpu().device);
                             chunks.insert(nalgebra_glm::vec3(i, k, j), chunk);
                         }
                     }
