@@ -450,7 +450,6 @@ fn draw_ui(
             ui.label(egui::RichText::new(format!("total triangles: {}", app.render_results.triangles_rendered)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunk vram footprint: {}", app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("memory per chunk: {}", memory_per_chunk)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new("warning, the memory amount above takes both vertices and indices into consideration").color(egui::Color32::GRAY).small());
             ui.label(egui::RichText::new(format!("chunks: {}", app.render_results.chunk_count)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunks update count: {}", app.app_info.chunk_updates)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("draw calls: {}", app.render_results.draw_calls)).color(egui::Color32::ORANGE));
