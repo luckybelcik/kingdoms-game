@@ -453,9 +453,10 @@ fn draw_ui(
         };
 
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+            ui.label(egui::RichText::new("Counts are for rendered geometry only. Excludes data skipped by CPU culling but still in memory").color(egui::Color32::GRAY).small());
             ui.label(egui::RichText::new(format!("window size: {}x {}y", app.app_info.last_size.0, app.app_info.last_size.1)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("total triangles: {}", app.render_results.triangles_rendered)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("chunk vram footprint: {}", app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("total triangles (bytes): {}", app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("memory per chunk: {}", memory_per_chunk)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunks: {}", app.render_results.chunk_count)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunks update count: {}", app.app_info.chunk_updates)).color(egui::Color32::ORANGE));
