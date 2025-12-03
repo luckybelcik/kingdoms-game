@@ -43,6 +43,19 @@ codegen-units = 512
 incremental = true
 opt-level = 0
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+[profile.release-prof]
+inherits = "release" 
+debug = true
+debug-assertions = false 
+overflow-checks = false
+rustflags = [
+    "-C", "force-frame-pointers=yes",
+]
+
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
 rustflags = [
