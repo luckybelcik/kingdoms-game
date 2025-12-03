@@ -6,6 +6,9 @@ pub struct Vertex {
     // the next 10 bits are for the face size (RESERVED FOR GREEDY MESHING LATER)
     // the remaining 4 bits are unused
     pub data: u32,
+    // theoretically all bits are used,
+    // but in reality i only care for the 16 first bits
+    // might use the rest for texture variation stuff
     pub id: u32
 }
 

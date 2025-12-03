@@ -12,10 +12,11 @@ const QUAD_INDICES: &[u32] = &[
 pub struct Scene {
     pub pipeline: wgpu::RenderPipeline,
     shared_quad_ibo: wgpu::Buffer,
+    chunk_ssbo_bind_group: wgpu::BindGroup,
 }
 
 impl Scene {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat, chunk_ssbo: &wgpu::Buffer) -> Self {
         let pipeline = Self::create_pipeline(device, surface_format);
 
         let shared_quad_ibo = device.create_buffer_init(
@@ -26,16 +27,28 @@ impl Scene {
             }
         );
 
+        let chunk_ssbo_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Chunk SSBO Bind Group"),
+            layout: &get_chunk_ssbo_layout(device),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0, 
+                    resource: chunk_ssbo.as_entire_binding(), 
+                }
+            ],
+        });
+
         Self {
             pipeline,
             shared_quad_ibo,
+            chunk_ssbo_bind_group,
         }
     }
 
     pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &mut HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
         -> RenderResults {
         renderpass.set_pipeline(&self.pipeline);
-        // renderpass.set_bind_group(0, &self.uniform.bind_group, &[]);
+        renderpass.set_bind_group(0, &self.chunk_ssbo_bind_group, &[]);
         PushConstants::update_render_config(renderpass, render_config);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -43,37 +56,39 @@ impl Scene {
         let mut results = RenderResults::default();
 
         for chunk in chunks.values().into_iter() {
-            if let Some(buffer) = &chunk.mesh.get_instance_points() {
-                PushConstants::update_mvp_matrix(renderpass, chunk, camera_pos, camera_rot, aspect_ratio);
+            let mut draw_calls = chunk.mesh.get_draw_calls();
+            let culled_calls = chunk.mesh.get_visible_draw_calls(camera_pos, chunk.get_chunk_pos());
 
-                let mut draw_calls = chunk.mesh.get_draw_calls();
-                let culled_calls = chunk.mesh.get_visible_draw_calls(camera_pos, chunk.get_chunk_pos());
+            if culled_calls.len() == 0 {
+                continue;
+            } 
 
-                if render_config.get_cull_chunk_faces_bit() {
-                    draw_calls = &culled_calls;
-                }
+            PushConstants::update_mvp_matrix(renderpass, chunk, camera_pos, camera_rot, aspect_ratio);
 
-                for draw_call in draw_calls {
-                    let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
-                    let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
-                    let slice = start..end;
-
-                    if start >= end { // next iteration if nothing to draw
-                        continue;
-                    }
-
-                    renderpass.set_vertex_buffer(0, buffer.slice(slice));
-                    renderpass.draw_indexed(
-                        0..6,
-                        0,
-                        0..draw_call.instance_count as u32,
-                    );
-
-                    results.triangles_rendered += draw_call.instance_count as u32;
-                    results.draw_calls += 1;
-                }
-                results.chunk_count += 1;
+            if render_config.get_cull_chunk_faces_bit() {
+                draw_calls = &culled_calls;
             }
+
+            for draw_call in draw_calls {
+                let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
+                let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
+
+                PushConstants::update_per_draw_data(renderpass, draw_call.buffer_offset, draw_call.instance_count);
+
+                if start >= end { // next iteration if nothing to draw
+                    continue;
+                }
+
+                renderpass.draw_indexed(
+                    0..6,
+                    0,
+                    0..draw_call.instance_count as u32,
+                );
+
+                results.triangles_rendered += draw_call.instance_count as u32;
+                results.draw_calls += 1;
+            }
+            results.chunk_count += 1;
         }
 
         results
@@ -99,7 +114,7 @@ impl Scene {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&get_chunk_ssbo_layout(device)],
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
@@ -109,7 +124,7 @@ impl Scene {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: Some("vertex_main"),
-                buffers: &[Vertex::instance_description()],
+                buffers: &[],
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState {
@@ -147,4 +162,24 @@ impl Scene {
             cache: None,
         })
     }
+}
+
+fn get_chunk_ssbo_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Storage Buffer Layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0, 
+                visibility: wgpu::ShaderStages::VERTEX, 
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage {
+                        read_only: true,
+                    },
+                    has_dynamic_offset: false, 
+                    min_binding_size: None, 
+                },
+                count: None,
+            }
+        ],
+    })
 }

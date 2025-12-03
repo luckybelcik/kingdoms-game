@@ -5,20 +5,25 @@ const QUAD_VERTICES: array<vec3<f32>, 4> = array<vec3<f32>, 4>(
     vec3<f32>(1.0, 1.0, 0.0),
 );
 
-//@group(0) @binding(0)
-//var<uniform> ubo: Uniform;
+struct Vertex {
+    position: u32,
+    id: u32,
+}
+
+@group(0) @binding(0) var<storage, read> chunk_SSBO: array<u32>;
 
 struct PushConstants {
     pvm: mat4x4<f32>,
     app_render_config: u32,
+    ssbo_offset: u32,
+    byte_count: u32,
 }
 
 var<push_constant> push: PushConstants;
 
 struct VertexInput {
     @builtin(vertex_index) vertex_id: u32,
-    @location(1) position: u32,
-    @location(2) id: u32,
+    @builtin(instance_index) instance_id: u32,
 };
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -71,9 +76,14 @@ const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
 );
 
 @vertex
-fn vertex_main(vert: VertexInput) -> VertexOutput {
+fn vertex_main(in: VertexInput) -> VertexOutput {
+    // divide ssbo offset to go from u8 to u32
+    let proper_offset = (push.ssbo_offset / 4) + (in.instance_id * 2);
+    let pos = chunk_SSBO[proper_offset];
+    let id = chunk_SSBO[proper_offset + 1];
+
     var transparency: f32 = 1.0;
-    if vert.id == 0 {
+    if id == 0 {
         transparency = 0.5;
     }
 
@@ -81,7 +91,7 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
 
     var out: VertexOutput;
     var quad_pos: vec3<f32>;
-    switch vert.vertex_id {
+    switch in.vertex_id {
         case 0u: {
             out.color = vec4<f32>(1.0, 0.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[0];
@@ -105,7 +115,7 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
     }
 
     if render_textures {
-        switch vert.id {
+        switch id {
             case 1u: { // stone
                 out.color = vec4<f32>(0.32, 0.32, 0.32, 1.0);
             }
@@ -122,10 +132,10 @@ fn vertex_main(vert: VertexInput) -> VertexOutput {
     }
 
     // 0b11111 = 31
-    let x = vert.position & 31;
-    let y = (vert.position >> 5u) & 31;
-    let z = (vert.position >> 10u) & 31;
-    let index = (vert.position >> 15u) & 7;
+    let x = pos & 31;
+    let y = (pos >> 5u) & 31;
+    let z = (pos >> 10u) & 31;
+    let index = (pos >> 15u) & 7;
 
     let instance_local_pos = vec4<f32>(f32(x), f32(y), f32(z), 0.0);
 
