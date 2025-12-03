@@ -100,21 +100,6 @@ impl ApplicationHandler for App {
             }
         }
 
-        // then generate meshes
-        if let Some(renderer) = &self.renderer {
-            for i in 0..CHUNKS_WIDTH {
-                for j in 0..CHUNKS_LENGTH {
-                    for k in 0..CHUNKS_HEIGHT {
-                        let pos = nalgebra_glm::vec3(i, k, j);
-                        if let Some(mut chunk) = chunks.remove(&pos) {
-                            (&mut chunk).reserve_mesh_space(&renderer.get_gpu().device);
-                            chunks.insert(nalgebra_glm::vec3(i, k, j), chunk);
-                        }
-                    }
-                }
-            }
-        }
-
         self.chunks = chunks;
 
         app_info.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);

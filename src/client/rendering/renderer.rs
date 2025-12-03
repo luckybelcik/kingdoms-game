@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ssbo_allocator::allocator::SSBOAllocator;
+
 use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults}, shared::chunk::Chunk};
 
 pub struct Renderer {
@@ -7,6 +9,7 @@ pub struct Renderer {
     depth_texture_view: wgpu::TextureView,
     egui_renderer: egui_wgpu::Renderer,
     scene: Scene,
+    chunk_ssbo: SSBOAllocator,
 }
 
 impl Renderer {
@@ -34,13 +37,16 @@ impl Renderer {
             },
         );
 
-        let scene = Scene::new(&gpu.device, gpu.surface_format);
+        let chunk_ssbo = SSBOAllocator::new(&gpu.device, "Chunk SSBO", 8_388_608);
+
+        let scene = Scene::new(&gpu.device, gpu.surface_format, chunk_ssbo.get_buffer());
 
         Self {
             gpu,
             depth_texture_view,
             egui_renderer,
             scene,
+            chunk_ssbo,
         }
     }
 
@@ -100,7 +106,7 @@ impl Renderer {
                 ];
                 
                 let mask = chunk.chunk_mask;
-                chunk.mesh.update_mesh(&self.gpu.queue, &mask, &nearby_chunks);
+                chunk.mesh.update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &mask, &nearby_chunks);
 
                 chunks_mut
                 .insert(key, chunk);

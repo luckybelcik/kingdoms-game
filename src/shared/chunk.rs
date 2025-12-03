@@ -1,5 +1,8 @@
 use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex}};
 use nalgebra_glm as glm;
+use ssbo_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
+
+const DATA_PADDING_SIZE_IN_SSBO: u64 = 32;
 
 pub struct Chunk {
     chunk_pos: glm::IVec3,
@@ -17,7 +20,7 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [0; CHUNK_VOLUME],
-            mesh: ChunkMesh { cube_mesh: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
+            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
@@ -26,7 +29,7 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [1; CHUNK_VOLUME],
-            mesh: ChunkMesh { cube_mesh: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
+            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0xffffffff; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
@@ -54,32 +57,16 @@ impl Chunk {
     pub fn get_chunk_mask(&self) -> &[u32] {
         &self.chunk_mask
     }
-
-    pub fn reserve_mesh_space(&mut self, device: &wgpu::Device) {
-        let vertex_buffer = wgpu::util::DeviceExt::create_buffer_init(
-            device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Vertex Buffer"),
-                contents: bytemuck::cast_slice(&[0; 50_000]),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            },
-        );
-        
-        self.mesh.cube_mesh = Some(vertex_buffer);
-    }
 }
 
 pub struct ChunkMesh {
-    cube_mesh: Option<wgpu::Buffer>,
+    allocator_offset: Option<Offset>,
+    allocated_size: Option<PhysicalSize>,
     is_dirty: bool,
     chunk_draw_call_infos: Vec<ChunkDrawCallInfo>,
 }
 
 impl ChunkMesh {
-    pub fn get_instance_points(&self) -> &Option<wgpu::Buffer> {
-        &self.cube_mesh
-    }
-
     pub fn get_draw_calls(&self) -> &Vec<ChunkDrawCallInfo> {
         &self.chunk_draw_call_infos
     }
@@ -88,7 +75,7 @@ impl ChunkMesh {
         self.chunk_draw_call_infos.clear();
     }
 
-    pub fn update_mesh(&mut self, queue: &wgpu::Queue , chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
+    pub fn update_mesh(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator, chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
         if self.is_dirty == false {
             return false;
         }
@@ -229,7 +216,33 @@ impl ChunkMesh {
 
         let lens = [right_len, left_len, top_len, bottom_len, front_len, back_len];
 
-        let mut offset = 0;
+        let mut points = Vec::<Vertex>::new();
+        points.append(&mut points_right);
+        points.append(&mut points_left);
+        points.append(&mut points_top);
+        points.append(&mut points_bottom);
+        points.append(&mut points_front);
+        points.append(&mut points_back);
+
+        let data: &[u8] = bytemuck::cast_slice(&points);
+        let new_offset;
+        let new_size;
+        if let (Some(offset), Some(size)) = (self.allocator_offset, self.allocated_size) {
+            if data.len() <= size as usize { // if data fits
+                allocator.modify(queue, offset, data).expect("Failed to modify chunk SSBO data");
+                new_offset = offset;
+                new_size = size;
+            } else {
+                allocator.deallocate_wipe(queue, offset).expect("Failed to wipe chunk SSBO data");
+                new_offset = allocator.allocate(queue, data, Some(DATA_PADDING_SIZE_IN_SSBO)).expect("Failed to allocate chunk on SSBO");
+                new_size = data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
+            }
+        } else {
+            new_offset = allocator.allocate(queue, data, Some(DATA_PADDING_SIZE_IN_SSBO)).expect("Failed to allocate chunk on SSBO");
+            new_size = data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
+        }
+
+        let mut offset = new_offset;
         let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
         for i in 0..lens.len() {
             let current_len = lens[i];
@@ -243,21 +256,10 @@ impl ChunkMesh {
             offset += len_64;
         }
 
-        println!("draw call info: {:?}", chunk_draw_call_infos);
-
         self.chunk_draw_call_infos = chunk_draw_call_infos;
 
-        let mut points = Vec::<Vertex>::new();
-        points.append(&mut points_right);
-        points.append(&mut points_left);
-        points.append(&mut points_top);
-        points.append(&mut points_bottom);
-        points.append(&mut points_front);
-        points.append(&mut points_back);
-
-        println!("chunk updated");
-
-        queue.write_buffer(&self.cube_mesh.as_ref().unwrap(), 0, bytemuck::cast_slice(&points));
+        self.allocator_offset = Some(new_offset);
+        self.allocated_size = Some(new_size);
 
         true
     }

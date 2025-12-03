@@ -1,3 +1,5 @@
+use wgpu::Backends;
+
 use crate::shared::render::push_constants::PUSH_CONSTANTS_SIZE;
 
 pub struct Gpu {
@@ -56,6 +58,7 @@ impl Gpu {
         height: u32,
     ) -> Self {
         let descriptor = wgpu::InstanceDescriptor {
+            backends: Backends::VULKAN,
             ..Default::default()
         };
         let instance = wgpu::Instance::new(&descriptor);

@@ -1,15 +1,19 @@
-use crate::{client::rendering::apprenderconfig::AppRenderConfig, shared::chunk::Chunk};
+use crate::{client::rendering::apprenderconfig::AppRenderConfig, shared::{chunk::Chunk, render::per_draw_data::PerDrawData}};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PushConstants {
     pub pvm: nalgebra_glm::Mat4,
     pub render_config: AppRenderConfig,
+    pub per_draw_data: PerDrawData, 
 }
 
-pub const PUSH_CONSTANTS_SIZE: u32 = std::mem::size_of::<PushConstants>() as u32;
 pub const ARG_1_SIZE: u32 = std::mem::size_of::<nalgebra_glm::Mat4>() as u32;
+// the size is of a u32 here because though we store the whole apprenderconfig in pushconstants,
+// we only use the first field for push constants
 pub const ARG_2_SIZE: u32 = std::mem::size_of::<u32>() as u32;
+pub const ARG_3_SIZE: u32 = std::mem::size_of::<PerDrawData>() as u32;
+pub const PUSH_CONSTANTS_SIZE: u32 = ARG_1_SIZE + ARG_2_SIZE + ARG_3_SIZE;
 
 impl PushConstants {
     pub fn get_range() -> wgpu::PushConstantRange {
@@ -30,6 +34,12 @@ impl PushConstants {
     #[inline(always)]
     pub fn update_render_config(renderpass: &mut wgpu::RenderPass<'_>, render_config: &AppRenderConfig) {
         renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[render_config.push_constant_data]));
+    }
+
+    #[inline(always)]
+    pub fn update_per_draw_data(renderpass: &mut wgpu::RenderPass<'_>, offset: u64, size: u64) {
+        let data = [offset as u32, size as u32];
+        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE + ARG_2_SIZE, bytemuck::cast_slice(&[data]));
     }
 }
 
