@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex}};
 use nalgebra_glm as glm;
 use ssbo_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
@@ -20,7 +22,7 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [0; CHUNK_VOLUME],
-            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
+            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
@@ -29,12 +31,12 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [1; CHUNK_VOLUME],
-            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, is_dirty: true, chunk_draw_call_infos: Vec::new() },
+            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0xffffffff; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
 
-    pub fn set_block(&mut self, x: usize, y: usize, z: usize, block: u16) {
+    pub fn set_block(&mut self, x: usize, y: usize, z: usize, block: u16, dirty_chunks: &mut HashSet<glm::IVec3>) {
         if x < CHUNK_SIZE || y < CHUNK_SIZE || z < CHUNK_SIZE {
             self.blocks[x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE] = block;
             if block == 0 {
@@ -42,7 +44,8 @@ impl Chunk {
             } else {
                 self.chunk_mask[y + z * CHUNK_SIZE] |= 1 << x;
             }
-            self.mesh.is_dirty = true;
+
+            dirty_chunks.insert(self.chunk_pos);
         }
     }
 
@@ -62,7 +65,6 @@ impl Chunk {
 pub struct ChunkMesh {
     allocator_offset: Option<Offset>,
     allocated_size: Option<PhysicalSize>,
-    is_dirty: bool,
     chunk_draw_call_infos: Vec<ChunkDrawCallInfo>,
 }
 
@@ -76,12 +78,6 @@ impl ChunkMesh {
     }
 
     pub fn update_mesh(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator, chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
-        if self.is_dirty == false {
-            return false;
-        }
-
-        self.is_dirty = false;
-
         let mut points_right = Vec::new();
         let mut points_left = Vec::new();
         let mut points_top = Vec::new();
@@ -243,8 +239,6 @@ impl ChunkMesh {
         }
 
         let mut offset = new_offset / 4;
-        println!("offset: {}", offset);
-        println!("size: {}", data.len());
         let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
         for i in 0..lens.len() {
             let current_len = lens[i];
