@@ -23,49 +23,25 @@ impl PushConstants {
         }
     }
 
-    #[cfg(not(debug_assertions))]
-    #[inline(always)]
+    #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn get_vp_matrix(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, aspect_ratio: f32) -> nalgebra_glm::Mat4x4 {
         let projection = nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
         let view = nalgebra_glm::look_at_lh(&camera_pos, &(camera_pos + camera_forward(camera_rot)), &nalgebra_glm::Vec3::y());
         projection * view
     }
 
-    pub fn get_vp_matrix(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, aspect_ratio: f32) -> nalgebra_glm::Mat4x4 {
-        let projection = nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
-        let view = nalgebra_glm::look_at_lh(&camera_pos, &(camera_pos + camera_forward(camera_rot)), &nalgebra_glm::Vec3::y());
-        projection * view
-    }
-
-    #[cfg(not(debug_assertions))]
-    #[inline(always)]
+    #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn update_mvp_matrix(renderpass: &mut wgpu::RenderPass<'_>, chunk: &Chunk, pv: &nalgebra_glm::Mat4x4) {
         let model_matrix = nalgebra_glm::translate(&nalgebra_glm::Mat4::identity(), &(chunk.get_chunk_pos().map(|x| x as f32) * 32 as f32));
         renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[pv * model_matrix]));
     }
 
-    pub fn update_mvp_matrix(renderpass: &mut wgpu::RenderPass<'_>, chunk: &Chunk, pv: &nalgebra_glm::Mat4x4) {
-        let model_matrix = nalgebra_glm::translate(&nalgebra_glm::Mat4::identity(), &(chunk.get_chunk_pos().map(|x| x as f32) * 32 as f32));
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[pv * model_matrix]));
-    }
-
-    #[cfg(not(debug_assertions))]
-    #[inline(always)]
+    #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn update_render_config(renderpass: &mut wgpu::RenderPass<'_>, render_config: &AppRenderConfig) {
         renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[render_config.push_constant_data]));
     }
 
-    pub fn update_render_config(renderpass: &mut wgpu::RenderPass<'_>, render_config: &AppRenderConfig) {
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[render_config.push_constant_data]));
-    }
-
-    #[cfg(not(debug_assertions))]
-    #[inline(always)]
-    pub fn update_per_draw_data(renderpass: &mut wgpu::RenderPass<'_>, offset: u64, size: u64) {
-        let data = [offset as u32, size as u32];
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE + ARG_2_SIZE, bytemuck::cast_slice(&[data]));
-    }
-
+    #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn update_per_draw_data(renderpass: &mut wgpu::RenderPass<'_>, offset: u64, size: u64) {
         let data = [offset as u32, size as u32];
         renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE + ARG_2_SIZE, bytemuck::cast_slice(&[data]));
