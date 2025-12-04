@@ -13,10 +13,11 @@ struct Vertex {
 @group(0) @binding(0) var<storage, read> chunk_SSBO: array<u32>;
 
 struct PushConstants {
-    pvm: mat4x4<f32>,
+    pv: mat4x4<f32>,
     app_render_config: u32,
     ssbo_offset: u32,
     byte_count: u32,
+    chunk_pos: vec3<i32>,
 }
 
 var<push_constant> push: PushConstants;
@@ -139,9 +140,12 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 
     let instance_local_pos = vec4<f32>(f32(x), f32(y), f32(z), 0.0);
 
+    let multiplied_chunk_pos = push.chunk_pos * 32;
+    let final_chunk_pos = vec4<f32>(f32(multiplied_chunk_pos.x), f32(multiplied_chunk_pos.y), f32(multiplied_chunk_pos.z), 0);
+
     let face_transform = FACE_TRANSFORMS[index];
 
-    out.position = push.pvm * (instance_local_pos + face_transform * vec4<f32>(quad_pos, 1.0));
+    out.position = push.pv * ((instance_local_pos + face_transform * vec4<f32>(quad_pos, 1.0)) + final_chunk_pos);
     return out;
 };
 

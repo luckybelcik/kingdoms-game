@@ -1,11 +1,12 @@
-use crate::{client::rendering::apprenderconfig::AppRenderConfig, shared::{chunk::Chunk, render::per_draw_data::PerDrawData}};
+use crate::{client::rendering::apprenderconfig::AppRenderConfig, shared::{render::per_draw_data::PerDrawData}};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PushConstants {
     pub pvm: nalgebra_glm::Mat4,
     pub render_config: AppRenderConfig,
-    pub per_draw_data: PerDrawData, 
+    pub per_draw_data: PerDrawData,
+    pub chunk_pos: [i32; 3]
 }
 
 pub const ARG_1_SIZE: u32 = std::mem::size_of::<nalgebra_glm::Mat4>() as u32;
@@ -13,7 +14,8 @@ pub const ARG_1_SIZE: u32 = std::mem::size_of::<nalgebra_glm::Mat4>() as u32;
 // we only use the first field for push constants
 pub const ARG_2_SIZE: u32 = std::mem::size_of::<u32>() as u32;
 pub const ARG_3_SIZE: u32 = std::mem::size_of::<PerDrawData>() as u32;
-pub const PUSH_CONSTANTS_SIZE: u32 = ARG_1_SIZE + ARG_2_SIZE + ARG_3_SIZE;
+pub const ARG_4_SIZE: u32 = std::mem::size_of::<[i32; 3]>() as u32;
+pub const PUSH_CONSTANTS_SIZE: u32 = ARG_1_SIZE + ARG_2_SIZE + ARG_3_SIZE + ARG_4_SIZE + 4;
 
 impl PushConstants {
     pub fn get_range() -> wgpu::PushConstantRange {
@@ -24,27 +26,28 @@ impl PushConstants {
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
-    pub fn get_vp_matrix(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, aspect_ratio: f32) -> nalgebra_glm::Mat4x4 {
+    pub fn update_vp_matrix(renderpass: &mut wgpu::RenderPass<'_>, camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, aspect_ratio: f32) {
         let projection = nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
         let view = nalgebra_glm::look_at_lh(&camera_pos, &(camera_pos + camera_forward(camera_rot)), &nalgebra_glm::Vec3::y());
-        projection * view
-    }
-
-    #[cfg_attr(not(debug_assertions), inline(always))]
-    pub fn update_mvp_matrix(renderpass: &mut wgpu::RenderPass<'_>, chunk: &Chunk, pv: &nalgebra_glm::Mat4x4) {
-        let model_matrix = nalgebra_glm::translate(&nalgebra_glm::Mat4::identity(), &(chunk.get_chunk_pos().map(|x| x as f32) * 32 as f32));
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[pv * model_matrix]));
+        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[projection * view]));
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn update_render_config(renderpass: &mut wgpu::RenderPass<'_>, render_config: &AppRenderConfig) {
-        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[render_config.push_constant_data]));
+        let data = render_config.push_constant_data;
+        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE, bytemuck::cast_slice(&[data]));
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn update_per_draw_data(renderpass: &mut wgpu::RenderPass<'_>, offset: u64, size: u64) {
         let data = [offset as u32, size as u32];
         renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE + ARG_2_SIZE, bytemuck::cast_slice(&[data]));
+    }
+
+    #[cfg_attr(not(debug_assertions), inline(always))]
+    pub fn update_chunk_pos(renderpass: &mut wgpu::RenderPass<'_>, chunk_pos: nalgebra_glm::IVec3) {
+        let chunk_pos = [chunk_pos.x, chunk_pos.y, chunk_pos.z];
+        renderpass.set_push_constants(wgpu::ShaderStages::VERTEX, ARG_1_SIZE + ARG_2_SIZE + ARG_3_SIZE + 4, bytemuck::cast_slice(&[chunk_pos]));
     }
 }
 
