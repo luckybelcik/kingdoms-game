@@ -243,6 +243,8 @@ impl ChunkMesh {
         }
 
         let mut offset = new_offset;
+        println!("offset: {}", offset);
+        println!("size: {}", data.len());
         let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
         for i in 0..lens.len() {
             let current_len = lens[i];

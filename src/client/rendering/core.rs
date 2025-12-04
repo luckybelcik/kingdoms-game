@@ -53,7 +53,7 @@ impl Scene {
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
 
-        let pv = PushConstants::get_vp_matrix(camera_pos, camera_rot, aspect_ratio);
+        PushConstants::update_vp_matrix(renderpass, camera_pos, camera_rot, aspect_ratio);
 
         let mut results = RenderResults::default();
 
@@ -65,7 +65,7 @@ impl Scene {
                 continue;
             } 
 
-            PushConstants::update_mvp_matrix(renderpass, chunk, &pv);
+            PushConstants::update_chunk_pos(renderpass, chunk.get_chunk_pos());
 
             if render_config.get_cull_chunk_faces_bit() {
                 draw_calls = &culled_calls;
