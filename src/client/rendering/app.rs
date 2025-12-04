@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{sync::Arc};
 use std::f32::consts::PI;
 use egui::{Align2, Color32};
@@ -19,8 +19,8 @@ use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
-const CHUNKS_WIDTH: i32 = 8;
-const CHUNKS_LENGTH: i32 = 8;
+const CHUNKS_WIDTH: i32 = 16;
+const CHUNKS_LENGTH: i32 = 16;
 const CHUNKS_HEIGHT: i32 = 4;
 
 #[derive(Default)]
@@ -30,6 +30,7 @@ pub struct App {
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub chunks: HashMap<nalgebra_glm::IVec3, Chunk>,
+    pub dirty_chunks: HashSet<nalgebra_glm::IVec3>,
     pub app_info: AppInfo,
     pub app_render_config: AppRenderConfig,
     render_results: RenderResults,
@@ -95,6 +96,7 @@ impl ApplicationHandler for App {
                 for k in 0..CHUNKS_HEIGHT {
                     let chunk = Chunk::new_full(i, k, j);
                     chunks.insert(nalgebra_glm::vec3(i, k, j), chunk);
+                    self.dirty_chunks.insert(nalgebra_glm::vec3(i, k, j));
                 }
             }
         }
@@ -199,7 +201,7 @@ impl App {
                 if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(self.app_info.camera_pos, self.app_info.camera_rot, &self.chunks) {
                     if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
                         log::info!("Break block at {} {} {}", x, y, z);
-                        chunk.set_block(x, y, z, 0);
+                        chunk.set_block(x, y, z, 0, &mut self.dirty_chunks);
                     }
                 }
             }
@@ -209,7 +211,7 @@ impl App {
                 if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(self.app_info.camera_pos, self.app_info.camera_rot, &self.chunks) {
                     if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
                         log::info!("Place block at {} {} {}", x, y, z);
-                        chunk.set_block(x, y, z, 1);
+                        chunk.set_block(x, y, z, 1, &mut self.dirty_chunks);
                     }
                 }
             }
@@ -304,6 +306,7 @@ impl App {
             paint_jobs,
             textures_delta,
             &mut self.chunks,
+            &mut self.dirty_chunks,
             self.app_info.camera_pos,
             self.app_info.camera_rot,
             &self.app_render_config,

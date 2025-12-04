@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ssbo_allocator::allocator::SSBOAllocator;
 
@@ -61,6 +61,7 @@ impl Renderer {
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
         chunks_mut: &mut HashMap<nalgebra_glm::IVec3, Chunk>,
+        dirty_chunks: &mut HashSet<nalgebra_glm::IVec3>,
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,
         render_config: &AppRenderConfig,
@@ -85,9 +86,9 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
-        let keys: Vec<_> = chunks_mut.keys().cloned().collect();
+        let dirty_keys = dirty_chunks;
 
-        for key in keys {
+        for key in dirty_keys.iter() {
             if let Some(mut chunk) = chunks_mut.remove(&key) {
                 let chunk_pos_right = nalgebra_glm::vec3(key.x + 1, key.y, key.z);
                 let chunk_pos_left = nalgebra_glm::vec3(key.x - 1, key.y, key.z);
@@ -108,10 +109,11 @@ impl Renderer {
                 let mask = chunk.chunk_mask;
                 chunk.mesh.update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &mask, &nearby_chunks);
 
-                chunks_mut
-                .insert(key, chunk);
+                chunks_mut.insert(*key, chunk);
             }
         }
+
+        dirty_keys.clear();
 
         self.egui_renderer.update_buffers(
             &self.gpu.device,
