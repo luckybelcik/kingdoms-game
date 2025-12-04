@@ -37,7 +37,7 @@ impl Renderer {
             },
         );
 
-        let chunk_ssbo = SSBOAllocator::new(&gpu.device, "Chunk SSBO", 8_388_608);
+        let chunk_ssbo = SSBOAllocator::new(&gpu.device, "Chunk SSBO", 134_217_728);
 
         let scene = Scene::new(&gpu.device, gpu.surface_format, chunk_ssbo.get_buffer());
 

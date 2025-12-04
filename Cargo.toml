@@ -31,6 +31,7 @@ gpu-allocator = { version = "0.27", optional = true }
 pollster = "0.4.0"
 wgpu-hal = { version = "27.0.4", optional = true }
 ssbo-allocator = { path = "../ssbo-allocator" }
+rayon = "1.11.0"
 
 [features]
 default = ["wgpu/default"]
