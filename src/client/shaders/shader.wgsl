@@ -78,8 +78,7 @@ const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
 
 @vertex
 fn vertex_main(in: VertexInput) -> VertexOutput {
-    // divide ssbo offset to go from u8 to u32
-    let proper_offset = (push.ssbo_offset / 4) + (in.instance_id * 2);
+    let proper_offset = push.ssbo_offset + (in.instance_id * 2);
     let pos = chunk_SSBO[proper_offset];
     let id = chunk_SSBO[proper_offset + 1];
 
