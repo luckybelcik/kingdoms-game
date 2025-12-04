@@ -242,7 +242,7 @@ impl ChunkMesh {
             new_size = data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
         }
 
-        let mut offset = new_offset;
+        let mut offset = new_offset / 4;
         println!("offset: {}", offset);
         println!("size: {}", data.len());
         let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
@@ -255,7 +255,7 @@ impl ChunkMesh {
                     instance_count: len_64,
                     visible: true,
             });
-            offset += len_64;
+            offset += len_64 * 2;
         }
 
         self.chunk_draw_call_infos = chunk_draw_call_infos;
