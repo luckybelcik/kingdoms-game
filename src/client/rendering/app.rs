@@ -21,7 +21,7 @@ use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
 const CHUNKS_WIDTH: i32 = 8;
 const CHUNKS_LENGTH: i32 = 8;
-const CHUNKS_HEIGHT: i32 = 1;
+const CHUNKS_HEIGHT: i32 = 4;
 
 #[derive(Default)]
 pub struct App {
@@ -90,7 +90,6 @@ impl ApplicationHandler for App {
         app_info.last_render_time = Some(Instant::now());
 
         let mut chunks = HashMap::<nalgebra_glm::IVec3, Chunk>::new();
-        // first, generate chunks
         for i in 0..CHUNKS_WIDTH {
             for j in 0..CHUNKS_LENGTH {
                 for k in 0..CHUNKS_HEIGHT {
