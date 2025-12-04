@@ -19,9 +19,9 @@ use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
-const CHUNKS_WIDTH: i32 = 16;
-const CHUNKS_LENGTH: i32 = 16;
-const CHUNKS_HEIGHT: i32 = 4;
+const CHUNKS_WIDTH: i32 = 32;
+const CHUNKS_LENGTH: i32 = 32;
+const CHUNKS_HEIGHT: i32 = 2;
 
 #[derive(Default)]
 pub struct App {
