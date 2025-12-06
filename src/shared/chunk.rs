@@ -134,7 +134,7 @@ impl SendableChunkMesh {
                 } else {
                     // chunk border top
                     if let Some(n_top) = neighbor_up {
-                        let neighbor_slice = n_top.chunk_mask[(z * CHUNK_SIZE)];
+                        let neighbor_slice = n_top.chunk_mask[z * CHUNK_SIZE];
                         yplus = current_slice & !neighbor_slice;
                     } else {
                         yplus = current_slice;
