@@ -11,6 +11,8 @@ const QUAD_INDICES: &[u32] = &[
 
 pub struct Scene {
     pub pipeline: wgpu::RenderPipeline,
+    #[cfg(debug_assertions)]
+    pub line_pipeline: wgpu::RenderPipeline,
     shared_quad_ibo: wgpu::Buffer,
     chunk_ssbo_bind_group: wgpu::BindGroup,
 }
@@ -38,8 +40,17 @@ impl Scene {
             ],
         });
 
+        #[cfg(not(debug_assertions))]
+        return Self {
+            pipeline,
+            shared_quad_ibo,
+            chunk_ssbo_bind_group,
+        };
+
+        #[cfg(debug_assertions)]
         Self {
             pipeline,
+            line_pipeline: Self::create_line_pipeline(device, surface_format),
             shared_quad_ibo,
             chunk_ssbo_bind_group,
         }
@@ -47,7 +58,16 @@ impl Scene {
 
     pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &mut HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
         -> RenderResults {
+        #[cfg(debug_assertions)]
+        if render_config.get_use_line_rendering_bit() {
+            renderpass.set_pipeline(&self.line_pipeline);
+        } else {
+            renderpass.set_pipeline(&self.pipeline);
+        }
+
+        #[cfg(not(debug_assertions))]
         renderpass.set_pipeline(&self.pipeline);
+        
         renderpass.set_bind_group(0, &self.chunk_ssbo_bind_group, &[]);
         PushConstants::update_render_config(renderpass, render_config);
 
@@ -135,6 +155,69 @@ impl Scene {
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+                unclipped_depth: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Renderer::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: Some("fragment_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            multiview: None,
+            cache: None,
+        })
+    }
+
+    #[cfg(debug_assertions)]
+    fn create_line_pipeline(
+        device: &wgpu::Device,
+        surface_format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
+        let shader_source = include_str!("../shaders/shader.wgsl");
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&get_chunk_ssbo_layout(device)],
+            push_constant_ranges: &[PushConstants::get_range()],
+        });
+
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: Some("vertex_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Line,
                 conservative: false,
                 unclipped_depth: false,
             },

@@ -18,8 +18,8 @@ use crate::client::rendering::ui_state::{PopupWindow, RenderConfigData, UIState,
 use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
-const CHUNKS_WIDTH: i32 = 16;
-const CHUNKS_LENGTH: i32 = 16;
+const CHUNKS_WIDTH: i32 = 4;
+const CHUNKS_LENGTH: i32 = 4;
 const CHUNKS_HEIGHT: i32 = 1;
 
 #[derive(Default)]
@@ -218,6 +218,12 @@ impl App {
         if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key {
             if event.state == ElementState::Pressed {
                 self.app_render_config.toggle_render_textures_bit();
+            }
+        }
+        #[cfg(debug_assertions)]
+        if let PhysicalKey::Code(KeyCode::KeyL) = event.physical_key {
+            if event.state == ElementState::Pressed {
+                self.app_render_config.toggle_use_line_rendering_bit();
             }
         }
         if let PhysicalKey::Code(KeyCode::F3) = event.physical_key {
