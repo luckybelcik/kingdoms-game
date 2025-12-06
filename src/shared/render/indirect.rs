@@ -11,24 +11,22 @@ pub struct DrawElementsIndirectCommand {
 }
 
 pub struct NormalGroupInfo {
-    pub count: u32, 
+    pub count: u32,
     pub offset: u32,
     pub normal_id: u8,
 }
 
 pub fn create_mdi_commands(
-    group_infos: &[NormalGroupInfo; 6], 
+    group_infos: &[NormalGroupInfo; 6],
     camera_rot: glm::Vec3,
 ) -> [DrawElementsIndirectCommand; 6] {
-    let mut commands: [DrawElementsIndirectCommand; 6] = [
-        DrawElementsIndirectCommand {
-            index_count: 6,
-            instance_count: 0,
-            first_index: 0,
-            base_vertex: 0,
-            first_instance: 0,
-        }; 6
-    ];
+    let mut commands: [DrawElementsIndirectCommand; 6] = [DrawElementsIndirectCommand {
+        index_count: 6,
+        instance_count: 0,
+        first_index: 0,
+        base_vertex: 0,
+        first_instance: 0,
+    }; 6];
 
     let pitch = camera_rot.x;
     let yaw = camera_rot.y;

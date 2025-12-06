@@ -79,7 +79,8 @@ impl Gpu {
                     label: Some("WGPU Device"),
                     memory_hints: wgpu::MemoryHints::default(),
                     #[cfg(debug_assertions)]
-                    required_features: wgpu::Features::PUSH_CONSTANTS | wgpu::Features::POLYGON_MODE_LINE,
+                    required_features: wgpu::Features::PUSH_CONSTANTS
+                        | wgpu::Features::POLYGON_MODE_LINE,
                     #[cfg(not(debug_assertions))]
                     required_features: wgpu::Features::PUSH_CONSTANTS,
                     required_limits: wgpu::Limits {

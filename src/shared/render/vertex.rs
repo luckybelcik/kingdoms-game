@@ -9,13 +9,13 @@ pub struct Vertex {
     // theoretically all bits are used,
     // but in reality i only care for the 16 first bits
     // might use the rest for texture variation stuff
-    pub id: u32
+    pub id: u32,
 }
 
 impl Vertex {
     pub fn instance_description() -> wgpu::VertexBufferLayout<'static> {
         const ATTRIBUTES: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![1 => Uint32, 2 => Uint32];
+            wgpu::vertex_attr_array![1 => Uint32, 2 => Uint32];
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
