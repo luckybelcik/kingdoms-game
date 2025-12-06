@@ -16,7 +16,6 @@ use crate::client::rendering::apprenderconfig::AppRenderConfig;
 use crate::client::rendering::render_results::RenderResults;
 use crate::client::rendering::ui_state::{PopupWindow, RenderConfigData, UIState, WorldSizePopupData};
 use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
-use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
 const CHUNKS_WIDTH: i32 = 16;
@@ -221,6 +220,11 @@ impl App {
                 self.app_render_config.toggle_render_textures_bit();
             }
         }
+        if let PhysicalKey::Code(KeyCode::F3) = event.physical_key {
+            if event.state == ElementState::Pressed {
+                self.ui_state.show_ui = !self.ui_state.show_ui;
+            }
+        }
     }
 
     fn handle_resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -263,13 +267,15 @@ impl App {
             }
         }
 
-        draw_ui(
-            self,
-            avg_delta_time,
-            highest_fps,
-            lowest_fps,
-        );
-
+        if self.ui_state.show_ui {
+            draw_ui(
+                self,
+                avg_delta_time,
+                highest_fps,
+                lowest_fps,
+            );
+        }
+        
         let (Some(gui_state), Some(renderer), Some(window)) = (
             self.gui_state.as_mut(),
             self.renderer.as_mut(),

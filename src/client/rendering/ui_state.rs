@@ -2,6 +2,7 @@ use crate::client::rendering::apprenderconfig::AppRenderConfig;
 
 #[derive(Default)]
 pub struct UIState {
+    pub show_ui: bool,
     pub popup_window: PopupWindow
 }
 
