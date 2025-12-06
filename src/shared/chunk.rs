@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::shared::{constants::{CHUNK_POS_BITS, CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow}, render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex}};
 use nalgebra_glm as glm;
@@ -6,10 +6,11 @@ use ssbo_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
 const DATA_PADDING_SIZE_IN_SSBO: u64 = 32;
 
+#[derive(Clone)]
 pub struct Chunk {
     chunk_pos: glm::IVec3,
     blocks: [u16; CHUNK_VOLUME],
-    pub mesh: ChunkMesh,
+    pub mesh: StoredChunkMesh,
     pub chunk_mask: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE],
 }
 
@@ -22,7 +23,7 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [0; CHUNK_VOLUME],
-            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
+            mesh: StoredChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE]
         }
     }
@@ -31,7 +32,7 @@ impl Chunk {
         Self {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [1; CHUNK_VOLUME],
-            mesh: ChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
+            mesh: StoredChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
             chunk_mask: [(!0); CHUNK_SIZE * CHUNK_SIZE]
         }
     }
@@ -62,22 +63,16 @@ impl Chunk {
     }
 }
 
-pub struct ChunkMesh {
-    allocator_offset: Option<Offset>,
-    allocated_size: Option<PhysicalSize>,
-    chunk_draw_call_infos: Vec<ChunkDrawCallInfo>,
+pub struct SendableChunkMesh {
+    pub data: Vec<u8>,
+    pub lens: [usize; 6],
+    pub pos: nalgebra_glm::IVec3,
 }
 
-impl ChunkMesh {
-    pub fn get_draw_calls(&self) -> &Vec<ChunkDrawCallInfo> {
-        &self.chunk_draw_call_infos
-    }
+pub type MeshJob = (Arc<Chunk>, [Option<Arc<Chunk>>; 6]);
 
-    pub fn clear_draw_calls(&mut self) {
-        self.chunk_draw_call_infos.clear();
-    }
-
-    pub fn update_mesh(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator, chunk_mask: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
+impl SendableChunkMesh {
+    pub fn make_mesh(job: &MeshJob) -> SendableChunkMesh {
         let mut points_right = Vec::new();
         let mut points_left = Vec::new();
         let mut points_top = Vec::new();
@@ -85,17 +80,19 @@ impl ChunkMesh {
         let mut points_front = Vec::new();
         let mut points_back = Vec::new();
 
-        let neighbor_right = nearby_chunks[0];
-        let neighbor_left  = nearby_chunks[1];
-        let neighbor_up    = nearby_chunks[2];
-        let neighbor_down  = nearby_chunks[3];
-        let neighbor_front = nearby_chunks[4];
-        let neighbor_back  = nearby_chunks[5];
+        let neighbor_right = &job.1[0];
+        let neighbor_left  = &job.1[1];
+        let neighbor_up    = &job.1[2];
+        let neighbor_down  = &job.1[3];
+        let neighbor_front = &job.1[4];
+        let neighbor_back  = &job.1[5];
+
+        let chunk = &job.0;
 
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 let i_curr = y + z * CHUNK_SIZE;
-                let current_slice = chunk_mask[i_curr];
+                let current_slice = chunk.chunk_mask[i_curr];
 
                 let xplus;
                 let xminus;
@@ -112,7 +109,7 @@ impl ChunkMesh {
 
                 let yplus;
                 if y < CHUNK_SIZE - 1 {
-                    let upslice = chunk_mask[(y + 1) + z * CHUNK_SIZE];
+                    let upslice = chunk.chunk_mask[(y + 1) + z * CHUNK_SIZE];
                     yplus = current_slice & !upslice;
                 } else { // chunk border top
                     if let Some(n_top) = neighbor_up {
@@ -125,7 +122,7 @@ impl ChunkMesh {
 
                 let yminus;
                 if y != 0 {
-                    let downslice = chunk_mask[(y - 1) + z * CHUNK_SIZE];
+                    let downslice = chunk.chunk_mask[(y - 1) + z * CHUNK_SIZE];
                     yminus = current_slice & !downslice;
                 } else { // chunk border bottom
                     if let Some(n_bottom) = neighbor_down {
@@ -138,7 +135,7 @@ impl ChunkMesh {
 
                 let zplus;
                 if z < CHUNK_SIZE - 1 {
-                    let front_slice = chunk_mask[y + (z + 1) * CHUNK_SIZE];
+                    let front_slice = chunk.chunk_mask[y + (z + 1) * CHUNK_SIZE];
                     zplus = current_slice & !front_slice;
                 } else { // chunk border front
                     if let Some(n_front) = neighbor_front {
@@ -151,7 +148,7 @@ impl ChunkMesh {
 
                 let zminus;
                 if z > 0 {
-                    let back_slice = chunk_mask[y + (z - 1) * CHUNK_SIZE];
+                    let back_slice = chunk.chunk_mask[y + (z - 1) * CHUNK_SIZE];
                     zminus = current_slice & !back_slice;
                 } else { // chunk border back
                     if let Some(n_back) = neighbor_back {
@@ -222,28 +219,50 @@ impl ChunkMesh {
         points.append(&mut points_front);
         points.append(&mut points_back);
 
-        let data: &[u8] = bytemuck::cast_slice(&points);
+        let data = bytemuck::cast_slice(&points).to_vec();
+
+        SendableChunkMesh { data, lens, pos: chunk.chunk_pos }
+    }
+}
+
+#[derive(Clone)]
+pub struct StoredChunkMesh {
+    allocator_offset: Option<Offset>,
+    allocated_size: Option<PhysicalSize>,
+    chunk_draw_call_infos: Vec<ChunkDrawCallInfo>,
+}
+
+impl StoredChunkMesh {
+    pub fn get_draw_calls(&self) -> &Vec<ChunkDrawCallInfo> {
+        &self.chunk_draw_call_infos
+    }
+
+    pub fn clear_draw_calls(&mut self) {
+        self.chunk_draw_call_infos.clear();
+    }
+
+    pub fn update_mesh(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator, sent_mesh: &SendableChunkMesh) -> bool {
         let new_offset;
         let new_size;
         if let (Some(offset), Some(size)) = (self.allocator_offset, self.allocated_size) {
-            if data.len() <= size as usize { // if data fits
-                allocator.modify(queue, offset, data).expect("Failed to modify chunk SSBO data");
+            if sent_mesh.data.len() <= size as usize { // if data fits
+                allocator.modify(queue, offset, &sent_mesh.data).expect("Failed to modify chunk SSBO data");
                 new_offset = offset;
                 new_size = size;
             } else {
                 allocator.deallocate_wipe(queue, offset).expect("Failed to wipe chunk SSBO data");
-                new_offset = allocator.allocate(queue, data, Some(DATA_PADDING_SIZE_IN_SSBO)).expect("Failed to allocate chunk on SSBO");
-                new_size = data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
+                new_offset = allocator.allocate(queue, &sent_mesh.data, Some(DATA_PADDING_SIZE_IN_SSBO)).expect("Failed to allocate chunk on SSBO");
+                new_size = sent_mesh.data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
             }
         } else {
-            new_offset = allocator.allocate(queue, data, Some(DATA_PADDING_SIZE_IN_SSBO)).expect("Failed to allocate chunk on SSBO");
-            new_size = data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
+            new_offset = allocator.allocate(queue, &sent_mesh.data, Some(DATA_PADDING_SIZE_IN_SSBO)).expect("Failed to allocate chunk on SSBO");
+            new_size = sent_mesh.data.len() as u64 + DATA_PADDING_SIZE_IN_SSBO;
         }
 
         let mut offset = new_offset / 4;
         let mut chunk_draw_call_infos = Vec::<ChunkDrawCallInfo>::new();
-        for i in 0..lens.len() {
-            let current_len = lens[i];
+        for i in 0..sent_mesh.lens.len() {
+            let current_len = sent_mesh.lens[i];
             let len_64 = current_len as u64;
             chunk_draw_call_infos.push(
                 ChunkDrawCallInfo {

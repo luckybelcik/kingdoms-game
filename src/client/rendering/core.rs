@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{client::rendering::{apprenderconfig::AppRenderConfig, render_results::RenderResults, renderer::Renderer}, shared::{chunk::Chunk, render::{push_constants::PushConstants, vertex::Vertex}}};
+use arc_swap::ArcSwap;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 
 const QUAD_INDICES: &[u32] = &[
@@ -56,7 +57,7 @@ impl Scene {
         }
     }
 
-    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &mut HashMap<nalgebra_glm::IVec3, Chunk>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
+    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
         -> RenderResults {
         #[cfg(debug_assertions)]
         if render_config.get_use_line_rendering_bit() {
@@ -78,14 +79,15 @@ impl Scene {
         let mut results = RenderResults::default();
 
         for chunk in chunks.values().into_iter() {
-            let mut draw_calls = chunk.mesh.get_draw_calls();
-            let culled_calls = chunk.mesh.get_visible_draw_calls(camera_pos, chunk.get_chunk_pos());
+            let loaded_chunk = chunk.load();
+            let mut draw_calls = loaded_chunk.mesh.get_draw_calls();
+            let culled_calls = loaded_chunk.mesh.get_visible_draw_calls(camera_pos, loaded_chunk.get_chunk_pos());
 
             if culled_calls.len() == 0 {
                 continue;
             } 
 
-            PushConstants::update_chunk_pos(renderpass, chunk.get_chunk_pos());
+            PushConstants::update_chunk_pos(renderpass, loaded_chunk.get_chunk_pos());
 
             if render_config.get_cull_chunk_faces_bit() {
                 draw_calls = &culled_calls;
