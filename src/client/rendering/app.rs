@@ -396,6 +396,9 @@ fn draw_ui(
         mode_color = egui::Color32::GREEN;
     }
 
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
     egui::TopBottomPanel::top("top").show(ctx, |ui| {
         ui.horizontal(|ui| {
             egui::MenuBar::new().ui(ui, |ui| {
@@ -415,7 +418,13 @@ fn draw_ui(
                 }
 
                 ui.separator();
+
                 ui.label(egui::RichText::new(mode).color(mode_color));
+
+                ui.separator();
+
+                ui.label(egui::RichText::new(format!("{} / {}", os, arch)));
+
                 ui.separator();
             });
 
