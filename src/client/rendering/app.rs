@@ -382,7 +382,20 @@ fn draw_ui(
     lowest_fps: u16,
 ) {
     let ctx = app.gui_state.as_mut().unwrap().egui_ctx();
-    let title = "Rust/Wgpu";
+    let mode;
+    let mode_color;
+
+    #[cfg(debug_assertions)]
+    {
+        mode = "Debug";
+        mode_color = egui::Color32::RED;
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        mode = "Release";
+        mode_color = egui::Color32::GREEN;
+    }
+
     egui::TopBottomPanel::top("top").show(ctx, |ui| {
         ui.horizontal(|ui| {
             egui::MenuBar::new().ui(ui, |ui| {
@@ -402,7 +415,7 @@ fn draw_ui(
                 }
 
                 ui.separator();
-                ui.label(egui::RichText::new(title).color(egui::Color32::LIGHT_GREEN));
+                ui.label(egui::RichText::new(mode).color(mode_color));
                 ui.separator();
             });
 
