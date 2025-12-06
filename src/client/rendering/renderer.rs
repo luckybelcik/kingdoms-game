@@ -4,7 +4,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use ssbo_allocator::allocator::SSBOAllocator;
+use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
 use crate::{
     client::rendering::{

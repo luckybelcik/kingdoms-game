@@ -5,7 +5,7 @@ use crate::shared::{
     render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex},
 };
 use nalgebra_glm as glm;
-use ssbo_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
+use wgpu_buffer_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
 const DATA_PADDING_SIZE_IN_SSBO: u64 = 32;
 
