@@ -21,7 +21,7 @@ use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
 const CHUNKS_WIDTH: i32 = 32;
 const CHUNKS_LENGTH: i32 = 32;
-const CHUNKS_HEIGHT: i32 = 2;
+const CHUNKS_HEIGHT: i32 = 1;
 
 #[derive(Default)]
 pub struct App {

@@ -131,15 +131,15 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
         }
     }
 
-    // 0b11111 = 31
-    let x = pos & 31;
-    let y = (pos >> 5u) & 31;
-    let z = (pos >> 10u) & 31;
-    let index = (pos >> 15u) & 7;
+    // 0b111111 = 63
+    let x = pos & 63;
+    let y = (pos >> 6u) & 63;
+    let z = (pos >> 12u) & 63;
+    let index = (pos >> 18u) & 7;
 
     let instance_local_pos = vec4<f32>(f32(x), f32(y), f32(z), 0.0);
 
-    let multiplied_chunk_pos = push.chunk_pos * 32;
+    let multiplied_chunk_pos = push.chunk_pos * 64;
     let final_chunk_pos = vec4<f32>(f32(multiplied_chunk_pos.x), f32(multiplied_chunk_pos.y), f32(multiplied_chunk_pos.z), 0);
 
     let face_transform = FACE_TRANSFORMS[index];
