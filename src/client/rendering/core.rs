@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 
-use crate::{client::rendering::{apprenderconfig::AppRenderConfig, render_results::RenderResults, renderer::Renderer}, shared::{chunk::Chunk, render::{push_constants::PushConstants, vertex::Vertex}}};
+use crate::{
+    client::rendering::{
+        apprenderconfig::AppRenderConfig, render_results::RenderResults, renderer::Renderer,
+    },
+    shared::{
+        chunk::Chunk,
+        render::{push_constants::PushConstants, vertex::Vertex},
+    },
+};
 use arc_swap::ArcSwap;
-use wgpu::util::{DeviceExt, BufferInitDescriptor};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
-const QUAD_INDICES: &[u32] = &[
-    0, 2, 1,
-    2, 3, 1,
-];
-
+const QUAD_INDICES: &[u32] = &[0, 2, 1, 2, 3, 1];
 
 pub struct Scene {
     pub pipeline: wgpu::RenderPipeline,
@@ -19,26 +23,26 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat, chunk_ssbo: &wgpu::Buffer) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        surface_format: wgpu::TextureFormat,
+        chunk_ssbo: &wgpu::Buffer,
+    ) -> Self {
         let pipeline = Self::create_pipeline(device, surface_format);
 
-        let shared_quad_ibo = device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: Some("Shared Quad IBO"),
-                contents: bytemuck::cast_slice(QUAD_INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
+        let shared_quad_ibo = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Shared Quad IBO"),
+            contents: bytemuck::cast_slice(QUAD_INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         let chunk_ssbo_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Chunk SSBO Bind Group"),
             layout: &get_chunk_ssbo_layout(device),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0, 
-                    resource: chunk_ssbo.as_entire_binding(), 
-                }
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: chunk_ssbo.as_entire_binding(),
+            }],
         });
 
         #[cfg(not(debug_assertions))]
@@ -57,8 +61,15 @@ impl Scene {
         }
     }
 
-    pub fn render<'rpass>(&'rpass self, renderpass: &mut wgpu::RenderPass<'rpass>, chunks: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>, camera_rot: nalgebra_glm::Vec3, camera_pos: nalgebra_glm::Vec3, aspect_ratio: f32, render_config: &AppRenderConfig)
-        -> RenderResults {
+    pub fn render<'rpass>(
+        &'rpass self,
+        renderpass: &mut wgpu::RenderPass<'rpass>,
+        chunks: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+        camera_rot: nalgebra_glm::Vec3,
+        camera_pos: nalgebra_glm::Vec3,
+        aspect_ratio: f32,
+        render_config: &AppRenderConfig,
+    ) -> RenderResults {
         #[cfg(debug_assertions)]
         if render_config.get_use_line_rendering_bit() {
             renderpass.set_pipeline(&self.line_pipeline);
@@ -68,7 +79,7 @@ impl Scene {
 
         #[cfg(not(debug_assertions))]
         renderpass.set_pipeline(&self.pipeline);
-        
+
         renderpass.set_bind_group(0, &self.chunk_ssbo_bind_group, &[]);
         PushConstants::update_render_config(renderpass, render_config);
 
@@ -78,14 +89,16 @@ impl Scene {
 
         let mut results = RenderResults::default();
 
-        for chunk in chunks.values().into_iter() {
+        for chunk in chunks.values() {
             let loaded_chunk = chunk.load();
             let mut draw_calls = loaded_chunk.mesh.get_draw_calls();
-            let culled_calls = loaded_chunk.mesh.get_visible_draw_calls(camera_pos, loaded_chunk.get_chunk_pos());
+            let culled_calls = loaded_chunk
+                .mesh
+                .get_visible_draw_calls(camera_pos, loaded_chunk.get_chunk_pos());
 
-            if culled_calls.len() == 0 {
+            if culled_calls.is_empty() {
                 continue;
-            } 
+            }
 
             PushConstants::update_chunk_pos(renderpass, loaded_chunk.get_chunk_pos());
 
@@ -97,17 +110,18 @@ impl Scene {
                 let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
                 let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
 
-                PushConstants::update_per_draw_data(renderpass, draw_call.buffer_offset, draw_call.instance_count);
+                PushConstants::update_per_draw_data(
+                    renderpass,
+                    draw_call.buffer_offset,
+                    draw_call.instance_count,
+                );
 
-                if start >= end { // next iteration if nothing to draw
+                if start >= end {
+                    // next iteration if nothing to draw
                     continue;
                 }
 
-                renderpass.draw_indexed(
-                    0..6,
-                    0,
-                    0..draw_call.instance_count as u32,
-                );
+                renderpass.draw_indexed(0..6, 0, 0..draw_call.instance_count as u32);
 
                 results.triangles_rendered += draw_call.instance_count as u32 * 2;
                 results.draw_calls += 1;
@@ -118,10 +132,7 @@ impl Scene {
         results
     }
 
-    pub fn update(
-        &mut self,
-        _queue: &wgpu::Queue,
-    ) {
+    pub fn update(&mut self, _queue: &wgpu::Queue) {
         // this method will be used later for the SSBO
     }
 
@@ -254,19 +265,15 @@ impl Scene {
 fn get_chunk_ssbo_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Storage Buffer Layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0, 
-                visibility: wgpu::ShaderStages::VERTEX, 
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage {
-                        read_only: true,
-                    },
-                    has_dynamic_offset: false, 
-                    min_binding_size: None, 
-                },
-                count: None,
-            }
-        ],
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
     })
 }

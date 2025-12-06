@@ -3,7 +3,7 @@ use crate::client::rendering::apprenderconfig::AppRenderConfig;
 #[derive(Default)]
 pub struct UIState {
     pub show_ui: bool,
-    pub popup_window: PopupWindow
+    pub popup_window: PopupWindow,
 }
 
 impl UIState {
@@ -37,6 +37,9 @@ pub struct RenderConfigData {
 
 impl RenderConfigData {
     pub fn new(config: &AppRenderConfig) -> Self {
-        RenderConfigData { render_textures: config.get_render_textures_bit(), cull_chunk_faces: config.get_cull_chunk_faces_bit() }
+        RenderConfigData {
+            render_textures: config.get_render_textures_bit(),
+            cull_chunk_faces: config.get_cull_chunk_faces_bit(),
+        }
     }
 }

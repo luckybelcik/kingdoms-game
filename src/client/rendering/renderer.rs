@@ -1,9 +1,17 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use arc_swap::ArcSwap;
 use ssbo_allocator::allocator::SSBOAllocator;
 
-use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults}, shared::chunk::{Chunk, MeshJob, SendableChunkMesh}};
+use crate::{
+    client::rendering::{
+        apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults,
+    },
+    shared::chunk::{Chunk, MeshJob, SendableChunkMesh},
+};
 
 pub struct Renderer {
     gpu: Gpu,
@@ -81,9 +89,7 @@ impl Renderer {
         camera_rot: nalgebra_glm::Vec3,
         render_config: &AppRenderConfig,
     ) -> RenderResults {
-        self.scene.update(
-            &self.gpu.queue,
-        );
+        self.scene.update(&self.gpu.queue);
 
         for (id, image_delta) in &textures_delta.set {
             self.egui_renderer
@@ -104,7 +110,7 @@ impl Renderer {
         let dirty_keys = dirty_chunks;
 
         for key in dirty_keys.iter() {
-            if let Some(chunk) = chunks_mut.get(&key) {
+            if let Some(chunk) = chunks_mut.get(key) {
                 let chunk_pos_right = nalgebra_glm::vec3(key.x + 1, key.y, key.z);
                 let chunk_pos_left = nalgebra_glm::vec3(key.x - 1, key.y, key.z);
                 let chunk_pos_up = nalgebra_glm::vec3(key.x, key.y + 1, key.z);
@@ -120,7 +126,7 @@ impl Renderer {
                     chunks_mut.get(&chunk_pos_forward).map(|c| c.load_full()),
                     chunks_mut.get(&chunk_pos_backward).map(|c| c.load_full()),
                 ];
-                
+
                 let loaded_chunk = chunk.load_full();
 
                 self.job_sender.send((loaded_chunk, nearby_chunks)).unwrap();
@@ -133,7 +139,9 @@ impl Renderer {
             let chunk = chunks_mut.get(&sent_mesh.pos);
             if let Some(existing_chunk) = chunk {
                 let mut new_chunk = (*(existing_chunk.load_full())).clone();
-                new_chunk.mesh.update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &sent_mesh);
+                new_chunk
+                    .mesh
+                    .update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &sent_mesh);
                 existing_chunk.store(Arc::new(new_chunk));
             }
         }
@@ -207,8 +215,15 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            
-            results = self.scene.render(&mut render_pass, chunks_mut, camera_rot, camera_pos, self.gpu.aspect_ratio(), render_config);
+
+            results = self.scene.render(
+                &mut render_pass,
+                chunks_mut,
+                camera_rot,
+                camera_pos,
+                self.gpu.aspect_ratio(),
+                render_config,
+            );
 
             self.egui_renderer.render(
                 &mut render_pass.forget_lifetime(),

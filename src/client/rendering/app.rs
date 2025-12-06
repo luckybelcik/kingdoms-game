@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use std::{sync::Arc};
-use std::f32::consts::PI;
 use arc_swap::ArcSwap;
 use egui::{Align2, Color32};
-use web_time::{Instant};
+use std::collections::{HashMap, HashSet};
+use std::f32::consts::PI;
+use std::sync::Arc;
+use web_time::Instant;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -15,9 +15,11 @@ use winit::{
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
 use crate::client::rendering::render_results::RenderResults;
-use crate::client::rendering::ui_state::{PopupWindow, RenderConfigData, UIState, WorldSizePopupData};
-use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
-use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
+use crate::client::rendering::ui_state::{
+    PopupWindow, RenderConfigData, UIState, WorldSizePopupData,
+};
+use crate::client::rendering::util::{cast_ray_block_before, cast_ray_block_hit};
+use crate::{client::rendering::renderer::Renderer, shared::chunk::Chunk};
 
 const CHUNKS_WIDTH: i32 = 16;
 const CHUNKS_LENGTH: i32 = 16;
@@ -120,18 +122,22 @@ impl ApplicationHandler for App {
         let total: f32 = (self.app_info.delta_history.iter().sum::<u16>()) as f32;
         let avg_delta_time = total / (self.app_info.delta_history.len() as f32);
 
-        if self.app_info.tick % 10 == 0 {
+        if self.app_info.tick.is_multiple_of(10) {
             let now = Instant::now();
             if let Some(last) = self.app_info.last_render_time {
                 let delta_time = now - last;
-                self.app_info.delta_history.push_back(delta_time.as_millis() as u16);
+                self.app_info
+                    .delta_history
+                    .push_back(delta_time.as_millis() as u16);
 
                 if self.app_info.delta_history.len() > 512 {
                     self.app_info.delta_history.pop_front();
                 }
 
                 if avg_delta_time != 0.0 {
-                    self.app_info.avg_fps_history.push_back((1000.0 / avg_delta_time) as u16);
+                    self.app_info
+                        .avg_fps_history
+                        .push_back((1000.0 / avg_delta_time) as u16);
 
                     if self.app_info.avg_fps_history.len() > 128 {
                         self.app_info.avg_fps_history.pop_front();
@@ -149,10 +155,8 @@ impl ApplicationHandler for App {
         }
 
         {
-            let (Some(gui_state), Some(window)) = (
-                self.gui_state.as_mut(),
-                self.window.as_ref(),
-            ) else {
+            let (Some(gui_state), Some(window)) = (self.gui_state.as_mut(), self.window.as_ref())
+            else {
                 return;
             };
 
@@ -176,13 +180,19 @@ impl ApplicationHandler for App {
             _ => (),
         }
 
-        let Some(window) = self.window.as_ref() else { return };
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
         window.request_redraw();
     }
 }
 
 impl App {
-    fn handle_keyboard_input(&mut self, event: KeyEvent, event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn handle_keyboard_input(
+        &mut self,
+        event: KeyEvent,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+    ) {
         if let PhysicalKey::Code(key_code) = event.physical_key {
             match event.state {
                 ElementState::Pressed => {
@@ -196,53 +206,63 @@ impl App {
         if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
             event_loop.exit();
         }
-        if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key {
-            if event.state == ElementState::Pressed {
-                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(self.app_info.camera_pos, self.app_info.camera_rot, &self.chunks) {
-                    if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
-                        log::info!("Break block at {} {} {}", x, y, z);
-                        let mut new_chunk = (*(chunk.load_full())).clone();
-                        new_chunk.set_block(x, y, z, 0, &mut self.dirty_chunks);
-                        chunk.store(Arc::new(new_chunk));
-                    }
-                }
-            }
+        if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key
+            && event.state == ElementState::Pressed
+            && let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(
+                self.app_info.camera_pos,
+                self.app_info.camera_rot,
+                &self.chunks,
+            )
+            && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
+        {
+            log::info!("Break block at {} {} {}", x, y, z);
+            let mut new_chunk = (*(chunk.load_full())).clone();
+            new_chunk.set_block(x, y, z, 0, &mut self.dirty_chunks);
+            chunk.store(Arc::new(new_chunk));
         }
-        if let PhysicalKey::Code(KeyCode::Period) = event.physical_key {
-            if event.state == ElementState::Pressed {
-                if let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(self.app_info.camera_pos, self.app_info.camera_rot, &self.chunks) {
-                    if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
-                        log::info!("Place block at {} {} {}", x, y, z);
-                        let mut new_chunk = (*(chunk.load_full())).clone();
-                        new_chunk.set_block(x, y, z, 1, &mut self.dirty_chunks);
-                        chunk.store(Arc::new(new_chunk));
-                    }
-                }
-            }
+        if let PhysicalKey::Code(KeyCode::Period) = event.physical_key
+            && event.state == ElementState::Pressed
+            && let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(
+                self.app_info.camera_pos,
+                self.app_info.camera_rot,
+                &self.chunks,
+            )
+            && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
+        {
+            log::info!("Place block at {} {} {}", x, y, z);
+            let mut new_chunk = (*(chunk.load_full())).clone();
+            new_chunk.set_block(x, y, z, 1, &mut self.dirty_chunks);
+            chunk.store(Arc::new(new_chunk));
         }
-        if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key {
-            if event.state == ElementState::Pressed {
-                self.app_render_config.toggle_render_textures_bit();
-            }
+        if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key
+            && event.state == ElementState::Pressed
+        {
+            self.app_render_config.toggle_render_textures_bit();
         }
         #[cfg(debug_assertions)]
-        if let PhysicalKey::Code(KeyCode::KeyL) = event.physical_key {
-            if event.state == ElementState::Pressed {
-                self.app_render_config.toggle_use_line_rendering_bit();
-            }
+        if let PhysicalKey::Code(KeyCode::KeyL) = event.physical_key
+            && event.state == ElementState::Pressed
+        {
+            self.app_render_config.toggle_use_line_rendering_bit();
         }
-        if let PhysicalKey::Code(KeyCode::F3) = event.physical_key {
-            if event.state == ElementState::Pressed {
-                self.ui_state.show_ui = !self.ui_state.show_ui;
-            }
+        if let PhysicalKey::Code(KeyCode::F3) = event.physical_key
+            && event.state == ElementState::Pressed
+        {
+            self.ui_state.show_ui = !self.ui_state.show_ui;
         }
     }
 
     fn handle_resize(&mut self, new_size: PhysicalSize<u32>) {
-        let Some(renderer) = self.renderer.as_mut() else { return };
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
 
         if new_size.width > 0 && new_size.height > 0 {
-            log::info!("Resizing renderer surface to: ({}, {})", new_size.width, new_size.height);
+            log::info!(
+                "Resizing renderer surface to: ({}, {})",
+                new_size.width,
+                new_size.height
+            );
             renderer.resize(new_size.width, new_size.height);
             self.app_info.last_size = (new_size.width, new_size.height);
         }
@@ -270,7 +290,8 @@ impl App {
 
         let gui_input;
         {
-            if let (Some(gui_state), Some(window)) = (self.gui_state.as_mut(), self.window.as_mut()) {
+            if let (Some(gui_state), Some(window)) = (self.gui_state.as_mut(), self.window.as_mut())
+            {
                 gui_input = gui_state.take_egui_input(window);
                 gui_state.egui_ctx().begin_pass(gui_input);
             } else {
@@ -279,14 +300,9 @@ impl App {
         }
 
         if self.ui_state.show_ui {
-            draw_ui(
-                self,
-                avg_delta_time,
-                highest_fps,
-                lowest_fps,
-            );
+            draw_ui(self, avg_delta_time, highest_fps, lowest_fps);
         }
-        
+
         let (Some(gui_state), Some(renderer), Some(window)) = (
             self.gui_state.as_mut(),
             self.renderer.as_mut(),
@@ -335,7 +351,8 @@ impl App {
 
         if self.app_info.chunk_count > 0 && self.app_info.total_chunk_vram > 0 {
             self.app_info.chunk_count = self.chunks.len() as u64;
-            self.app_info.avg_chunk_vram = self.app_info.total_chunk_vram / self.app_info.chunk_count as u64;
+            self.app_info.avg_chunk_vram =
+                self.app_info.total_chunk_vram / self.app_info.chunk_count;
         }
     }
 
@@ -357,7 +374,11 @@ impl App {
             self.app_info.camera_rot.y -= rotation_speed;
         }
         // Clamp pitch
-        self.app_info.camera_rot.x = self.app_info.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
+        self.app_info.camera_rot.x = self
+            .app_info
+            .camera_rot
+            .x
+            .clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
         // Movement
         let (sin_y, cos_y) = self.app_info.camera_rot.y.sin_cos();
@@ -386,12 +407,7 @@ impl App {
     }
 }
 
-fn draw_ui(
-    app: &mut App,
-    avg_delta_time: f32,
-    highest_fps: u16,
-    lowest_fps: u16,
-) {
+fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
     let ctx = app.gui_state.as_mut().unwrap().egui_ctx();
     let mode;
     let mode_color;
@@ -418,14 +434,18 @@ fn draw_ui(
                         ui.close();
                     }
                     if ui.button("Change World Size").clicked() {
-                        app.ui_state.toggle_popup(PopupWindow::WorldSize(WorldSizePopupData::default()));
+                        app.ui_state
+                            .toggle_popup(PopupWindow::WorldSize(WorldSizePopupData::default()));
                         ui.close();
                     }
                 });
                 ui.separator();
 
                 if ui.button("Render Config").clicked() {
-                    app.ui_state.toggle_popup(PopupWindow::RenderConfig(RenderConfigData::new(&app.app_render_config)));
+                    app.ui_state
+                        .toggle_popup(PopupWindow::RenderConfig(RenderConfigData::new(
+                            &app.app_render_config,
+                        )));
                 }
 
                 ui.separator();
@@ -464,7 +484,10 @@ fn draw_ui(
             };
             ui.label(egui::RichText::new(format!("delta: {:.1} ms", avg_delta_time)).color(color));
             if avg_delta_time > 0.0 {
-                ui.label(egui::RichText::new(format!("FPS: {:.1}", 1000.0 / avg_delta_time)).color(color));
+                ui.label(
+                    egui::RichText::new(format!("FPS: {:.1}", 1000.0 / avg_delta_time))
+                        .color(color),
+                );
             }
             ui.label(egui::RichText::new(format!("Highest FPS: {}", highest_fps)).color(color));
             ui.label(egui::RichText::new(format!("Lowest FPS: {}", lowest_fps)).color(color));
@@ -473,31 +496,99 @@ fn draw_ui(
         ui.heading("Debug Info");
 
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            ui.label(egui::RichText::new(format!("window size: {}x {}y", app.app_info.last_size.0, app.app_info.last_size.1)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("chunks: {}", app.render_results.chunk_count)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("chunks update count: {}", app.app_info.chunk_updates)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app.app_info.camera_pos.x, app.app_info.camera_pos.y, app.app_info.camera_pos.z)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app.app_info.camera_rot.x.to_degrees(), app.app_info.camera_rot.y.to_degrees())).color(egui::Color32::ORANGE));
+            ui.label(
+                egui::RichText::new(format!(
+                    "window size: {}x {}y",
+                    app.app_info.last_size.0, app.app_info.last_size.1
+                ))
+                .color(egui::Color32::ORANGE),
+            );
+            ui.label(
+                egui::RichText::new(format!("chunks: {}", app.render_results.chunk_count))
+                    .color(egui::Color32::ORANGE),
+            );
+            ui.label(
+                egui::RichText::new(format!(
+                    "chunks update count: {}",
+                    app.app_info.chunk_updates
+                ))
+                .color(egui::Color32::ORANGE),
+            );
+            ui.label(
+                egui::RichText::new(format!(
+                    "cam pos: {:.2}, {:.2}, {:.2}",
+                    app.app_info.camera_pos.x, app.app_info.camera_pos.y, app.app_info.camera_pos.z
+                ))
+                .color(egui::Color32::ORANGE),
+            );
+            ui.label(
+                egui::RichText::new(format!(
+                    "cam rot: {:.2}, {:.2}",
+                    app.app_info.camera_rot.x.to_degrees(),
+                    app.app_info.camera_rot.y.to_degrees()
+                ))
+                .color(egui::Color32::ORANGE),
+            );
         });
 
         ui.heading("Memory Usage");
 
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            ui.label(egui::RichText::new(format!("ssbo allocations: {}", app.render_results.allocated_blocks)).color(egui::Color32::LIGHT_BLUE));
-            ui.label(egui::RichText::new(format!("ssbo size: {}", app.render_results.total_space)).color(egui::Color32::LIGHT_BLUE));
+            ui.label(
+                egui::RichText::new(format!(
+                    "ssbo allocations: {}",
+                    app.render_results.allocated_blocks
+                ))
+                .color(egui::Color32::LIGHT_BLUE),
+            );
+            ui.label(
+                egui::RichText::new(format!("ssbo size: {}", app.render_results.total_space))
+                    .color(egui::Color32::LIGHT_BLUE),
+            );
             if app.render_results.total_space > 0 {
-                ui.label(egui::RichText::new(format!("free ssbo memory: {:.1}%", app.render_results.free_space as f32 / app.render_results.total_space as f32 * 100.0)).color(egui::Color32::LIGHT_BLUE));
-                ui.label(egui::RichText::new(format!("used ssbo memory: {:.1}%", app.render_results.total_chunk_vram as f32 / app.render_results.total_space as f32 * 100.0)).color(egui::Color32::LIGHT_BLUE));
+                ui.label(
+                    egui::RichText::new(format!(
+                        "free ssbo memory: {:.1}%",
+                        app.render_results.free_space as f32
+                            / app.render_results.total_space as f32
+                            * 100.0
+                    ))
+                    .color(egui::Color32::LIGHT_BLUE),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "used ssbo memory: {:.1}%",
+                        app.render_results.total_chunk_vram as f32
+                            / app.render_results.total_space as f32
+                            * 100.0
+                    ))
+                    .color(egui::Color32::LIGHT_BLUE),
+                );
             }
-            ui.label(egui::RichText::new(format!("average mem per chunk: {}", app.render_results.avg_chunk_vram)).color(egui::Color32::LIGHT_BLUE));
+            ui.label(
+                egui::RichText::new(format!(
+                    "average mem per chunk: {}",
+                    app.render_results.avg_chunk_vram
+                ))
+                .color(egui::Color32::LIGHT_BLUE),
+            );
         });
 
         ui.heading("Render Info");
 
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            ui.label(egui::RichText::new(format!("triangles rendered: {}", app.render_results.triangles_rendered)).color(egui::Color32::LIGHT_GREEN));
-            ui.label(egui::RichText::new(format!("draw calls: {}", app.render_results.draw_calls)).color(egui::Color32::LIGHT_GREEN));
-        });  
+            ui.label(
+                egui::RichText::new(format!(
+                    "triangles rendered: {}",
+                    app.render_results.triangles_rendered
+                ))
+                .color(egui::Color32::LIGHT_GREEN),
+            );
+            ui.label(
+                egui::RichText::new(format!("draw calls: {}", app.render_results.draw_calls))
+                    .color(egui::Color32::LIGHT_GREEN),
+            );
+        });
     });
 
     egui::TopBottomPanel::bottom("Console").show(ctx, |ui| {
@@ -507,44 +598,67 @@ fn draw_ui(
     let mut state_to_set_to: Option<PopupWindow> = None;
 
     match &mut app.ui_state.popup_window {
-        PopupWindow::None => {},
+        PopupWindow::None => {}
         PopupWindow::WorldSize(popup_data) => {
-            egui::Window::new("World Size").anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO).resizable(false).collapsible(false).show(ctx, |ui| {
-                ui.add(egui::DragValue::new(&mut popup_data.size).prefix("Chunk area: ").range(0..=32).clamp_existing_to_range(true));
+            egui::Window::new("World Size")
+                .anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .resizable(false)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut popup_data.size)
+                            .prefix("Chunk area: ")
+                            .range(0..=32)
+                            .clamp_existing_to_range(true),
+                    );
 
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
-                        if ui.button("Save").clicked() {
-                            state_to_set_to = Some(PopupWindow::None);
-                        }
-                        if ui.button("Close").clicked() {
-                            state_to_set_to = Some(PopupWindow::None);
-                        }
+                    ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                            if ui.button("Save").clicked() {
+                                state_to_set_to = Some(PopupWindow::None);
+                            }
+                            if ui.button("Close").clicked() {
+                                state_to_set_to = Some(PopupWindow::None);
+                            }
+                        });
                     });
                 });
-            });
         }
         PopupWindow::RenderConfig(popup_data) => {
-            egui::Window::new("Render Config").anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO).resizable(false).collapsible(false).show(ctx, |ui| {
-                ui.label(egui::RichText::new("Push Constant Config").size(10.0).color(Color32::GOLD));
-                ui.checkbox(&mut popup_data.render_textures, "Block Visuals");
+            egui::Window::new("Render Config")
+                .anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .resizable(false)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.label(
+                        egui::RichText::new("Push Constant Config")
+                            .size(10.0)
+                            .color(Color32::GOLD),
+                    );
+                    ui.checkbox(&mut popup_data.render_textures, "Block Visuals");
 
-                ui.label(egui::RichText::new("Bool Config").size(10.0).color(Color32::GOLD));
-                ui.checkbox(&mut popup_data.cull_chunk_faces, "Cull Chunk Faces");
+                    ui.label(
+                        egui::RichText::new("Bool Config")
+                            .size(10.0)
+                            .color(Color32::GOLD),
+                    );
+                    ui.checkbox(&mut popup_data.cull_chunk_faces, "Cull Chunk Faces");
 
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
-                        if ui.button("Save").clicked() {
-                            app.app_render_config.set_render_textures_bit(popup_data.render_textures);
-                            app.app_render_config.set_cull_chunk_faces_bit(popup_data.cull_chunk_faces);
-                            state_to_set_to = Some(PopupWindow::None);
-                        }
-                        if ui.button("Close").clicked() {
-                            state_to_set_to = Some(PopupWindow::None);
-                        }
+                    ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                            if ui.button("Save").clicked() {
+                                app.app_render_config
+                                    .set_render_textures_bit(popup_data.render_textures);
+                                app.app_render_config
+                                    .set_cull_chunk_faces_bit(popup_data.cull_chunk_faces);
+                                state_to_set_to = Some(PopupWindow::None);
+                            }
+                            if ui.button("Close").clicked() {
+                                state_to_set_to = Some(PopupWindow::None);
+                            }
+                        });
                     });
                 });
-            });
         }
     }
 

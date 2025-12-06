@@ -1,9 +1,9 @@
 pub mod app;
-mod gpu;
-mod renderer;
-mod core;
 mod appinfo;
 pub mod apprenderconfig;
+mod core;
+mod gpu;
 mod render_results;
-mod util;
+mod renderer;
 mod ui_state;
+mod util;

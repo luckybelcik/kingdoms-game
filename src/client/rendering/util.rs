@@ -4,8 +4,11 @@ use arc_swap::ArcSwap;
 
 use crate::shared::{chunk::Chunk, constants::CHUNK_SIZE};
 
-pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>)
-    -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
+pub fn cast_ray_block_hit(
+    camera_pos: nalgebra_glm::Vec3,
+    camera_rot: nalgebra_glm::Vec3,
+    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+) -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
     let ray_pos = camera_pos;
     let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
 
@@ -21,20 +24,26 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
         wrap_to_chunk_coord(current_block_pos.z),
     );
 
-    if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x_start, chunk_y_start, chunk_z_start)) {
-        if chunk.load().get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
-            let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-            let chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-            let chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+    if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(
+        chunk_x_start,
+        chunk_y_start,
+        chunk_z_start,
+    )) && chunk
+        .load()
+        .get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start)
+        != 0
+    {
+        let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+        let chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+        let chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
 
-            let crx = wrap_to_chunk_coord(current_block_pos.x);
-            let cry = wrap_to_chunk_coord(current_block_pos.y);
-            let crz = wrap_to_chunk_coord(current_block_pos.z);
+        let crx = wrap_to_chunk_coord(current_block_pos.x);
+        let cry = wrap_to_chunk_coord(current_block_pos.y);
+        let crz = wrap_to_chunk_coord(current_block_pos.z);
 
-            let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
+        let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
 
-            return Some((chunk_pos, (crx, cry, crz)));
-        }
+        return Some((chunk_pos, (crx, cry, crz)));
     };
 
     let pitch = camera_rot.x;
@@ -42,11 +51,8 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
 
     let (sin_pitch, cos_pitch) = pitch.sin_cos();
     let (sin_yaw, cos_yaw) = yaw.sin_cos();
-    let direction = nalgebra_glm::vec3(
-        cos_pitch * cos_yaw,
-        sin_pitch,
-        cos_pitch * sin_yaw,
-    ).normalize();
+    let direction =
+        nalgebra_glm::vec3(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize();
 
     const EPSILON: f32 = 1e-6;
 
@@ -61,7 +67,8 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
         }
     }
 
-    let next_boundary = (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
+    let next_boundary =
+        (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
 
     let mut t_max = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
 
@@ -81,14 +88,12 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
                 current_block_pos.z += step.z;
                 t_max.z += t_delta.z;
             }
+        } else if t_max.y < t_max.z {
+            current_block_pos.y += step.y;
+            t_max.y += t_delta.y;
         } else {
-            if t_max.y < t_max.z {
-                current_block_pos.y += step.y;
-                t_max.y += t_delta.y;
-            } else {
-                current_block_pos.z += step.z;
-                t_max.z += t_delta.z;
-            }
+            current_block_pos.z += step.z;
+            t_max.z += t_delta.z;
         }
 
         let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
@@ -99,20 +104,23 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
         let cry = wrap_to_chunk_coord(current_block_pos.y);
         let crz = wrap_to_chunk_coord(current_block_pos.z);
 
-        if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z)) {
-            if chunk.load().get_block(crx, cry, crz) != 0 {
-                let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
-                
-                return Some((chunk_pos, (crx, cry, crz)));
-            }
+        if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z))
+            && chunk.load().get_block(crx, cry, crz) != 0
+        {
+            let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
+
+            return Some((chunk_pos, (crx, cry, crz)));
         }
     }
 
     None
 }
 
-pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>)
-    -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
+pub fn cast_ray_block_before(
+    camera_pos: nalgebra_glm::Vec3,
+    camera_rot: nalgebra_glm::Vec3,
+    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+) -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
     let ray_pos = camera_pos;
     let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
 
@@ -128,10 +136,16 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
         wrap_to_chunk_coord(current_block_pos.z),
     );
 
-    if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x_start, chunk_y_start, chunk_z_start)) {
-        if chunk.load().get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
-            return None;
-        }
+    if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(
+        chunk_x_start,
+        chunk_y_start,
+        chunk_z_start,
+    )) && chunk
+        .load()
+        .get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start)
+        != 0
+    {
+        return None;
     };
 
     let pitch = camera_rot.x;
@@ -139,11 +153,8 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
 
     let (sin_pitch, cos_pitch) = pitch.sin_cos();
     let (sin_yaw, cos_yaw) = yaw.sin_cos();
-    let direction = nalgebra_glm::vec3(
-        cos_pitch * cos_yaw,
-        sin_pitch,
-        cos_pitch * sin_yaw,
-    ).normalize();
+    let direction =
+        nalgebra_glm::vec3(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize();
 
     const EPSILON: f32 = 1e-6;
 
@@ -158,7 +169,8 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
         }
     }
 
-    let next_boundary = (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
+    let next_boundary =
+        (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
 
     let mut t_max = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
 
@@ -180,14 +192,12 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
                 current_block_pos.z += step.z;
                 t_max.z += t_delta.z;
             }
+        } else if t_max.y < t_max.z {
+            current_block_pos.y += step.y;
+            t_max.y += t_delta.y;
         } else {
-            if t_max.y < t_max.z {
-                current_block_pos.y += step.y;
-                t_max.y += t_delta.y;
-            } else {
-                current_block_pos.z += step.z;
-                t_max.z += t_delta.z;
-            }
+            current_block_pos.z += step.z;
+            t_max.z += t_delta.z;
         }
 
         let p_chunk_x = ((place_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
@@ -206,11 +216,11 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
         let c_cry = wrap_to_chunk_coord(current_block_pos.y);
         let c_crz = wrap_to_chunk_coord(current_block_pos.z);
 
-        if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(c_chunk_x, c_chunk_y, c_chunk_z)) {
-            if chunk.load().get_block(c_crx, c_cry, c_crz) != 0 {
-                let chunk_pos = nalgebra_glm::vec3(p_chunk_x, p_chunk_y, p_chunk_z);
-                return Some((chunk_pos, (p_crx, p_cry, p_crz)));
-            }
+        if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(c_chunk_x, c_chunk_y, c_chunk_z))
+            && chunk.load().get_block(c_crx, c_cry, c_crz) != 0
+        {
+            let chunk_pos = nalgebra_glm::vec3(p_chunk_x, p_chunk_y, p_chunk_z);
+            return Some((chunk_pos, (p_crx, p_cry, p_crz)));
         }
     }
 
