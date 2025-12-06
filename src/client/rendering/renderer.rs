@@ -1,8 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
+use arc_swap::ArcSwap;
 use ssbo_allocator::allocator::SSBOAllocator;
 
-use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults}, shared::chunk::Chunk};
+use crate::{client::rendering::{apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults}, shared::chunk::{Chunk, MeshJob, SendableChunkMesh}};
 
 pub struct Renderer {
     gpu: Gpu,
@@ -10,6 +11,8 @@ pub struct Renderer {
     egui_renderer: egui_wgpu::Renderer,
     scene: Scene,
     chunk_ssbo: SSBOAllocator,
+    job_sender: std::sync::mpsc::Sender<MeshJob>,
+    mesh_receiver: std::sync::mpsc::Receiver<SendableChunkMesh>,
 }
 
 impl Renderer {
@@ -41,12 +44,24 @@ impl Renderer {
 
         let scene = Scene::new(&gpu.device, gpu.surface_format, chunk_ssbo.get_buffer());
 
+        let (mesh_job_tx, mesh_job_rx) = std::sync::mpsc::channel::<MeshJob>();
+        let (mesh_tx, mesh_rx) = std::sync::mpsc::channel::<SendableChunkMesh>();
+
+        std::thread::spawn(move || {
+            for job in mesh_job_rx {
+                let sendable = SendableChunkMesh::make_mesh(&job);
+                mesh_tx.send(sendable).unwrap();
+            }
+        });
+
         Self {
             gpu,
             depth_texture_view,
             egui_renderer,
             scene,
             chunk_ssbo,
+            job_sender: mesh_job_tx,
+            mesh_receiver: mesh_rx,
         }
     }
 
@@ -60,7 +75,7 @@ impl Renderer {
         screen_descriptor: egui_wgpu::ScreenDescriptor,
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
-        chunks_mut: &mut HashMap<nalgebra_glm::IVec3, Chunk>,
+        chunks_mut: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
         dirty_chunks: &mut HashSet<nalgebra_glm::IVec3>,
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,
@@ -89,7 +104,7 @@ impl Renderer {
         let dirty_keys = dirty_chunks;
 
         for key in dirty_keys.iter() {
-            if let Some(mut chunk) = chunks_mut.remove(&key) {
+            if let Some(chunk) = chunks_mut.get(&key) {
                 let chunk_pos_right = nalgebra_glm::vec3(key.x + 1, key.y, key.z);
                 let chunk_pos_left = nalgebra_glm::vec3(key.x - 1, key.y, key.z);
                 let chunk_pos_up = nalgebra_glm::vec3(key.x, key.y + 1, key.z);
@@ -97,23 +112,31 @@ impl Renderer {
                 let chunk_pos_forward = nalgebra_glm::vec3(key.x, key.y, key.z + 1);
                 let chunk_pos_backward = nalgebra_glm::vec3(key.x, key.y, key.z - 1);
 
-                let nearby_chunks = [
-                    chunks_mut.get(&chunk_pos_right),
-                    chunks_mut.get(&chunk_pos_left),
-                    chunks_mut.get(&chunk_pos_up),
-                    chunks_mut.get(&chunk_pos_down),
-                    chunks_mut.get(&chunk_pos_forward),
-                    chunks_mut.get(&chunk_pos_backward),
+                let nearby_chunks: [Option<Arc<Chunk>>; 6] = [
+                    chunks_mut.get(&chunk_pos_right).map(|c| c.load_full()),
+                    chunks_mut.get(&chunk_pos_left).map(|c| c.load_full()),
+                    chunks_mut.get(&chunk_pos_up).map(|c| c.load_full()),
+                    chunks_mut.get(&chunk_pos_down).map(|c| c.load_full()),
+                    chunks_mut.get(&chunk_pos_forward).map(|c| c.load_full()),
+                    chunks_mut.get(&chunk_pos_backward).map(|c| c.load_full()),
                 ];
                 
-                let mask = chunk.chunk_mask;
-                chunk.mesh.update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &mask, &nearby_chunks);
+                let loaded_chunk = chunk.load_full();
 
-                chunks_mut.insert(*key, chunk);
+                self.job_sender.send((loaded_chunk, nearby_chunks)).unwrap();
             }
         }
 
         dirty_keys.clear();
+
+        for sent_mesh in self.mesh_receiver.try_iter() {
+            let chunk = chunks_mut.get(&sent_mesh.pos);
+            if let Some(existing_chunk) = chunk {
+                let mut new_chunk = (*(existing_chunk.load_full())).clone();
+                new_chunk.mesh.update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &sent_mesh);
+                existing_chunk.store(Arc::new(new_chunk));
+            }
+        }
 
         self.egui_renderer.update_buffers(
             &self.gpu.device,
@@ -201,7 +224,9 @@ impl Renderer {
         results.total_chunk_vram = self.chunk_ssbo.get_used_size();
         results.total_space = self.chunk_ssbo.get_size();
         results.free_space = self.chunk_ssbo.get_free_size();
-        results.avg_chunk_vram = results.total_chunk_vram / results.allocated_blocks as u64;
+        if results.allocated_blocks > 0 {
+            results.avg_chunk_vram = results.total_chunk_vram / results.allocated_blocks as u64;
+        }
 
         results
     }

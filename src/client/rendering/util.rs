@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use arc_swap::ArcSwap;
+
 use crate::shared::{chunk::Chunk, constants::CHUNK_SIZE};
 
-pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>)
+pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>)
     -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
     let ray_pos = camera_pos;
     let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
@@ -20,7 +22,7 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
     );
 
     if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x_start, chunk_y_start, chunk_z_start)) {
-        if chunk.get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
+        if chunk.load().get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
             let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
             let chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
             let chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
@@ -98,7 +100,7 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
         let crz = wrap_to_chunk_coord(current_block_pos.z);
 
         if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z)) {
-            if chunk.get_block(crx, cry, crz) != 0 {
+            if chunk.load().get_block(crx, cry, crz) != 0 {
                 let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
                 
                 return Some((chunk_pos, (crx, cry, crz)));
@@ -109,7 +111,7 @@ pub fn cast_ray_block_hit(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_g
     None
 }
 
-pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, chunks: &HashMap<nalgebra_glm::IVec3, Chunk>)
+pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebra_glm::Vec3, chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>)
     -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
     let ray_pos = camera_pos;
     let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
@@ -127,7 +129,7 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
     );
 
     if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x_start, chunk_y_start, chunk_z_start)) {
-        if chunk.get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
+        if chunk.load().get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) != 0 {
             return None;
         }
     };
@@ -205,7 +207,7 @@ pub fn cast_ray_block_before(camera_pos: nalgebra_glm::Vec3, camera_rot: nalgebr
         let c_crz = wrap_to_chunk_coord(current_block_pos.z);
 
         if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(c_chunk_x, c_chunk_y, c_chunk_z)) {
-            if chunk.get_block(c_crx, c_cry, c_crz) != 0 {
+            if chunk.load().get_block(c_crx, c_cry, c_crz) != 0 {
                 let chunk_pos = nalgebra_glm::vec3(p_chunk_x, p_chunk_y, p_chunk_z);
                 return Some((chunk_pos, (p_crx, p_cry, p_crz)));
             }
