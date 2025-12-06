@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::shared::{constants::{CHUNK_SIZE, CHUNK_VOLUME}, render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex}};
+use crate::shared::{constants::{CHUNK_POS_BITS, CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow}, render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex}};
 use nalgebra_glm as glm;
 use ssbo_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
@@ -10,7 +10,7 @@ pub struct Chunk {
     chunk_pos: glm::IVec3,
     blocks: [u16; CHUNK_VOLUME],
     pub mesh: ChunkMesh,
-    pub chunk_mask: [u32; CHUNK_SIZE * CHUNK_SIZE],
+    pub chunk_mask: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE],
 }
 
 impl Chunk {
@@ -32,7 +32,7 @@ impl Chunk {
             chunk_pos: glm::vec3(x, y, z),
             blocks: [1; CHUNK_VOLUME],
             mesh: ChunkMesh { allocator_offset: None, allocated_size: None, chunk_draw_call_infos: Vec::new() },
-            chunk_mask: [0xffffffff; CHUNK_SIZE * CHUNK_SIZE]
+            chunk_mask: [(!0); CHUNK_SIZE * CHUNK_SIZE]
         }
     }
 
@@ -57,7 +57,7 @@ impl Chunk {
         }
     }
 
-    pub fn get_chunk_mask(&self) -> &[u32] {
+    pub fn get_chunk_mask(&self) -> &[ChunkBitRow] {
         &self.chunk_mask
     }
 }
@@ -77,7 +77,7 @@ impl ChunkMesh {
         self.chunk_draw_call_infos.clear();
     }
 
-    pub fn update_mesh(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator, chunk_mask: &[u32; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
+    pub fn update_mesh(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator, chunk_mask: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE], nearby_chunks: &[Option<&Chunk>; 6]) -> bool {
         let mut points_right = Vec::new();
         let mut points_left = Vec::new();
         let mut points_top = Vec::new();
@@ -100,12 +100,12 @@ impl ChunkMesh {
                 let xplus;
                 let xminus;
                 if let Some(n_left) = neighbor_left {
-                    xplus = (current_slice & !(current_slice << 1)) & !(n_left.chunk_mask[i_curr] >> 31);
+                    xplus = (current_slice & !(current_slice << 1)) & !(n_left.chunk_mask[i_curr] >> (CHUNK_SIZE - 1));
                 } else {
                     xplus = current_slice & !(current_slice << 1);
                 }
                 if let Some(n_right) = neighbor_right {
-                    xminus = (current_slice & !(current_slice >> 1)) & !(n_right.chunk_mask[i_curr] << 31);
+                    xminus = (current_slice & !(current_slice >> 1)) & !(n_right.chunk_mask[i_curr] << (CHUNK_SIZE - 1));
                 } else {
                     xminus = current_slice & !(current_slice >> 1);
                 }
@@ -162,7 +162,7 @@ impl ChunkMesh {
                     }
                 }
 
-                for i in 0..32 {
+                for i in 0..CHUNK_SIZE {
                     // x plus bit
                     let xpb = xplus & (1 << i);
                     // x minus bit
@@ -173,30 +173,32 @@ impl ChunkMesh {
                     let zmb = zminus & (1 << i);
 
                     //                 this zero is filler data that gets replaced VVV
-                    let point = Vertex { data: (i | (y << 5) | (z << 10) | (0 << 15)) as u32, id: 1 };
+                    let point = Vertex { data: (i | (y << CHUNK_POS_BITS) | (z << (CHUNK_POS_BITS * 2)) | (0 << (CHUNK_POS_BITS * 3))) as u32, id: 1 };
+
+                    const CPB3: usize = CHUNK_POS_BITS * 3;
 
                     if xpb != 0 {
-                        let point = Vertex { data: point.data | ((0 as u32) << 15), id: point.id };
+                        let point = Vertex { data: point.data | ((0 as u32) << CPB3), id: point.id };
                         points_right.push(point)
                     }
                     if xmb != 0 {
-                        let point = Vertex { data: point.data | ((1 as u32) << 15), id: point.id };
+                        let point = Vertex { data: point.data | ((1 as u32) << CPB3), id: point.id };
                         points_left.push(point)
                     }
                     if ypb != 0 {
-                        let point = Vertex { data: point.data | ((2 as u32) << 15), id: point.id };
+                        let point = Vertex { data: point.data | ((2 as u32) << CPB3), id: point.id };
                         points_top.push(point)
                     }
                     if ymb != 0 {
-                        let point = Vertex { data: point.data | ((3 as u32) << 15), id: point.id };
+                        let point = Vertex { data: point.data | ((3 as u32) << CPB3), id: point.id };
                         points_bottom.push(point)
                     }
                     if zpb != 0 {
-                        let point = Vertex { data: point.data | ((4 as u32) << 15), id: point.id };
+                        let point = Vertex { data: point.data | ((4 as u32) << CPB3), id: point.id };
                         points_front.push(point)
                     }
                     if zmb != 0 {
-                        let point = Vertex { data: point.data | ((5 as u32) << 15), id: point.id };
+                        let point = Vertex { data: point.data | ((5 as u32) << CPB3), id: point.id };
                         points_back.push(point)
                     }
                 }
