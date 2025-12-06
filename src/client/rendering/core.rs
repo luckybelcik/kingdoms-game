@@ -87,7 +87,7 @@ impl Scene {
                     0..draw_call.instance_count as u32,
                 );
 
-                results.triangles_rendered += draw_call.instance_count as u32;
+                results.triangles_rendered += draw_call.instance_count as u32 * 2;
                 results.draw_calls += 1;
             }
             results.chunk_count += 1;

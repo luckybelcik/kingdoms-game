@@ -154,7 +154,7 @@ impl Renderer {
 
         encoder.insert_debug_marker("Render scene");
 
-        let results: RenderResults;
+        let mut results: RenderResults;
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -196,6 +196,12 @@ impl Renderer {
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
+
+        results.allocated_blocks = self.chunk_ssbo.get_allocation_count() as u32;
+        results.total_chunk_vram = self.chunk_ssbo.get_used_size();
+        results.total_space = self.chunk_ssbo.get_size();
+        results.free_space = self.chunk_ssbo.get_free_size();
+        results.avg_chunk_vram = results.total_chunk_vram / results.allocated_blocks as u64;
 
         results
     }

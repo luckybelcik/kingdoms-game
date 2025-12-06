@@ -19,8 +19,8 @@ use crate::client::rendering::util::{cast_ray_block_hit, cast_ray_block_before};
 use crate::shared::render::vertex::Vertex;
 use crate::{client::rendering::renderer::Renderer, shared::{chunk::{Chunk}}};
 
-const CHUNKS_WIDTH: i32 = 32;
-const CHUNKS_LENGTH: i32 = 32;
+const CHUNKS_WIDTH: i32 = 16;
+const CHUNKS_LENGTH: i32 = 16;
 const CHUNKS_HEIGHT: i32 = 1;
 
 #[derive(Default)]
@@ -433,24 +433,32 @@ fn draw_ui(
 
         ui.heading("Debug Info");
 
-        let memory_per_chunk = if app.render_results.chunk_count > 0 {
-            app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32 / app.render_results.chunk_count
-        } else {
-            0
-        };
-
         ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            ui.label(egui::RichText::new("Counts are for rendered geometry only. Excludes data skipped by CPU culling but still in memory").color(egui::Color32::GRAY).small());
             ui.label(egui::RichText::new(format!("window size: {}x {}y", app.app_info.last_size.0, app.app_info.last_size.1)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("total triangles: {}", app.render_results.triangles_rendered)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("total triangles (bytes): {}", app.render_results.triangles_rendered * std::mem::size_of::<Vertex>() as u32)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("memory per chunk: {}", memory_per_chunk)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunks: {}", app.render_results.chunk_count)).color(egui::Color32::ORANGE));
             ui.label(egui::RichText::new(format!("chunks update count: {}", app.app_info.chunk_updates)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("draw calls: {}", app.render_results.draw_calls)).color(egui::Color32::ORANGE));
-            ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app.app_info.camera_pos.x, app.app_info.camera_pos.y, app.app_info.camera_pos.z)).color(egui::Color32::LIGHT_BLUE));
-            ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app.app_info.camera_rot.x.to_degrees(), app.app_info.camera_rot.y.to_degrees())).color(egui::Color32::LIGHT_BLUE));
+            ui.label(egui::RichText::new(format!("cam pos: {:.2}, {:.2}, {:.2}", app.app_info.camera_pos.x, app.app_info.camera_pos.y, app.app_info.camera_pos.z)).color(egui::Color32::ORANGE));
+            ui.label(egui::RichText::new(format!("cam rot: {:.2}, {:.2}", app.app_info.camera_rot.x.to_degrees(), app.app_info.camera_rot.y.to_degrees())).color(egui::Color32::ORANGE));
         });
+
+        ui.heading("Memory Usage");
+
+        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+            ui.label(egui::RichText::new(format!("ssbo allocations: {}", app.render_results.allocated_blocks)).color(egui::Color32::LIGHT_BLUE));
+            ui.label(egui::RichText::new(format!("ssbo size: {}", app.render_results.total_space)).color(egui::Color32::LIGHT_BLUE));
+            if app.render_results.total_space > 0 {
+                ui.label(egui::RichText::new(format!("free ssbo memory: {:.1}%", app.render_results.free_space as f32 / app.render_results.total_space as f32 * 100.0)).color(egui::Color32::LIGHT_BLUE));
+                ui.label(egui::RichText::new(format!("used ssbo memory: {:.1}%", app.render_results.total_chunk_vram as f32 / app.render_results.total_space as f32 * 100.0)).color(egui::Color32::LIGHT_BLUE));
+            }
+            ui.label(egui::RichText::new(format!("average mem per chunk: {}", app.render_results.avg_chunk_vram)).color(egui::Color32::LIGHT_BLUE));
+        });
+
+        ui.heading("Render Info");
+
+        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+            ui.label(egui::RichText::new(format!("triangles rendered: {}", app.render_results.triangles_rendered)).color(egui::Color32::LIGHT_GREEN));
+            ui.label(egui::RichText::new(format!("draw calls: {}", app.render_results.draw_calls)).color(egui::Color32::LIGHT_GREEN));
+        });  
     });
 
     egui::TopBottomPanel::bottom("Console").show(ctx, |ui| {
