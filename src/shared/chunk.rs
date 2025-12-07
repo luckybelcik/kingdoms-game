@@ -105,6 +105,37 @@ impl SendableChunkMesh {
         let neighbor_front = &job.1[4];
         let neighbor_back = &job.1[5];
 
+        let right_mask = if let Some(n_right) = neighbor_right {
+            n_right.chunk_mask
+        } else {
+            [0; CHUNK_SIZE * CHUNK_SIZE]
+        };
+        let left_mask = if let Some(n_left) = neighbor_left {
+            n_left.chunk_mask
+        } else {
+            [0; CHUNK_SIZE * CHUNK_SIZE]
+        };
+        let top_mask = if let Some(n_top) = neighbor_up {
+            n_top.chunk_mask
+        } else {
+            [0; CHUNK_SIZE * CHUNK_SIZE]
+        };
+        let bottom_mask = if let Some(n_bottom) = neighbor_down {
+            n_bottom.chunk_mask
+        } else {
+            [0; CHUNK_SIZE * CHUNK_SIZE]
+        };
+        let front_mask = if let Some(n_front) = neighbor_front {
+            n_front.chunk_mask
+        } else {
+            [0; CHUNK_SIZE * CHUNK_SIZE]
+        };
+        let back_mask = if let Some(n_back) = neighbor_back {
+            n_back.chunk_mask
+        } else {
+            [0; CHUNK_SIZE * CHUNK_SIZE]
+        };
+
         let chunk = &job.0;
 
         for y in 0..CHUNK_SIZE {
@@ -112,33 +143,17 @@ impl SendableChunkMesh {
                 let i_curr = y + z * CHUNK_SIZE;
                 let current_slice = chunk.chunk_mask[i_curr];
 
-                let xplus;
-                let xminus;
-                if let Some(n_left) = neighbor_left {
-                    xplus = (current_slice & !(current_slice << 1))
-                        & !(n_left.chunk_mask[i_curr] >> (CHUNK_SIZE - 1));
-                } else {
-                    xplus = current_slice & !(current_slice << 1);
-                }
-                if let Some(n_right) = neighbor_right {
-                    xminus = (current_slice & !(current_slice >> 1))
-                        & !(n_right.chunk_mask[i_curr] << (CHUNK_SIZE - 1));
-                } else {
-                    xminus = current_slice & !(current_slice >> 1);
-                }
+                let xplus = (current_slice & !(current_slice << 1))
+                        & !(left_mask[i_curr] >> (CHUNK_SIZE - 1));
+                let xminus = (current_slice & !(current_slice >> 1))
+                        & !(right_mask[i_curr] << (CHUNK_SIZE - 1));
 
                 let yplus;
                 if y < CHUNK_SIZE - 1 {
                     let upslice = chunk.chunk_mask[(y + 1) + z * CHUNK_SIZE];
                     yplus = current_slice & !upslice;
                 } else {
-                    // chunk border top
-                    if let Some(n_top) = neighbor_up {
-                        let neighbor_slice = n_top.chunk_mask[z * CHUNK_SIZE];
-                        yplus = current_slice & !neighbor_slice;
-                    } else {
-                        yplus = current_slice;
-                    }
+                    yplus = current_slice & !top_mask[z * CHUNK_SIZE];
                 }
 
                 let yminus;
@@ -146,13 +161,7 @@ impl SendableChunkMesh {
                     let downslice = chunk.chunk_mask[(y - 1) + z * CHUNK_SIZE];
                     yminus = current_slice & !downslice;
                 } else {
-                    // chunk border bottom
-                    if let Some(n_bottom) = neighbor_down {
-                        let neighbor_slice = n_bottom.chunk_mask[CHUNK_SIZE - 1 + z * CHUNK_SIZE];
-                        yminus = current_slice & !neighbor_slice;
-                    } else {
-                        yminus = current_slice;
-                    }
+                    yminus = current_slice & !bottom_mask[CHUNK_SIZE - 1 + z * CHUNK_SIZE];
                 }
 
                 let zplus;
@@ -160,13 +169,7 @@ impl SendableChunkMesh {
                     let front_slice = chunk.chunk_mask[y + (z + 1) * CHUNK_SIZE];
                     zplus = current_slice & !front_slice;
                 } else {
-                    // chunk border front
-                    if let Some(n_front) = neighbor_front {
-                        let neighbor_slice = n_front.chunk_mask[y];
-                        zplus = current_slice & !neighbor_slice;
-                    } else {
-                        zplus = current_slice;
-                    }
+                    zplus = current_slice & !front_mask[y];
                 }
 
                 let zminus;
@@ -174,13 +177,7 @@ impl SendableChunkMesh {
                     let back_slice = chunk.chunk_mask[y + (z - 1) * CHUNK_SIZE];
                     zminus = current_slice & !back_slice;
                 } else {
-                    // chunk border back
-                    if let Some(n_back) = neighbor_back {
-                        let neighbor_slice = n_back.chunk_mask[y + CHUNK_SIZE - 1];
-                        zminus = current_slice & !neighbor_slice;
-                    } else {
-                        zminus = current_slice;
-                    }
+                    zminus = current_slice & !back_mask[y + CHUNK_SIZE - 1];
                 }
 
                 for i in 0..CHUNK_SIZE {
@@ -193,7 +190,6 @@ impl SendableChunkMesh {
                     let zpb = zplus & (1 << i);
                     let zmb = zminus & (1 << i);
 
-                    //                 this zero is filler data that gets replaced VVV
                     let point = Vertex {
                         data: (i
                             | (y << CHUNK_POS_BITS)
@@ -202,46 +198,46 @@ impl SendableChunkMesh {
                         id: 1,
                     };
 
-                    const CPB3: usize = CHUNK_POS_BITS * 3;
+                    const DATA_SIZE: usize = CHUNK_POS_BITS * 3;
 
                     if xpb != 0 {
                         let point = Vertex {
-                            data: point.data | (0_u32 << CPB3),
+                            data: point.data | (0_u32 << DATA_SIZE),
                             id: point.id,
                         };
                         points_right.push(point)
                     }
                     if xmb != 0 {
                         let point = Vertex {
-                            data: point.data | (1_u32 << CPB3),
+                            data: point.data | (1_u32 << DATA_SIZE),
                             id: point.id,
                         };
                         points_left.push(point)
                     }
                     if ypb != 0 {
                         let point = Vertex {
-                            data: point.data | (2_u32 << CPB3),
+                            data: point.data | (2_u32 << DATA_SIZE),
                             id: point.id,
                         };
                         points_top.push(point)
                     }
                     if ymb != 0 {
                         let point = Vertex {
-                            data: point.data | (3_u32 << CPB3),
+                            data: point.data | (3_u32 << DATA_SIZE),
                             id: point.id,
                         };
                         points_bottom.push(point)
                     }
                     if zpb != 0 {
                         let point = Vertex {
-                            data: point.data | (4_u32 << CPB3),
+                            data: point.data | (4_u32 << DATA_SIZE),
                             id: point.id,
                         };
                         points_front.push(point)
                     }
                     if zmb != 0 {
                         let point = Vertex {
-                            data: point.data | (5_u32 << CPB3),
+                            data: point.data | (5_u32 << DATA_SIZE),
                             id: point.id,
                         };
                         points_back.push(point)
