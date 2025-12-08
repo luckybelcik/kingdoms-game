@@ -148,7 +148,11 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     let face_transform = FACE_TRANSFORMS[face_normal];
 
     var stretched_quad_pos = quad_pos;
-    stretched_quad_pos.x = quad_pos.x * f32(h) - f32(h) + 1.0;
+    if face_normal == 1 || face_normal == 2 || face_normal == 5 {
+        stretched_quad_pos.x = quad_pos.x * f32(h) - f32(h - 1);
+    } else {
+        stretched_quad_pos.x = quad_pos.x * f32(h);
+    }
 
     out.position = push.pv * ((instance_local_pos + face_transform * vec4<f32>(stretched_quad_pos, 1.0)) + final_chunk_pos);
     return out;
