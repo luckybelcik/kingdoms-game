@@ -82,8 +82,17 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     let pos = chunk_SSBO[proper_offset];
     let id = chunk_SSBO[proper_offset + 1];
 
+    let block_id = (id >> 0u) & 65535;
+    let face_normal = (id >> 16u) & 7;
+
+    // 0b111111 = 63
+    var x = pos & 63;
+    var y = (pos >> 6u) & 63;
+    var z = (pos >> 12u) & 63;
+    let h = (pos >> 18u) & 63;
+
     var transparency: f32 = 1.0;
-    if id == 0 {
+    if block_id == 0 {
         transparency = 0.5;
     }
 
@@ -115,7 +124,7 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     }
 
     if render_textures {
-        switch id {
+        switch block_id {
             case 1u: { // stone
                 out.color = vec4<f32>(0.32, 0.32, 0.32, 1.0);
             }
@@ -131,20 +140,17 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
         }
     }
 
-    // 0b111111 = 63
-    let x = pos & 63;
-    let y = (pos >> 6u) & 63;
-    let z = (pos >> 12u) & 63;
-    let index = (pos >> 18u) & 7;
-
     let instance_local_pos = vec4<f32>(f32(x), f32(y), f32(z), 0.0);
 
     let multiplied_chunk_pos = push.chunk_pos * 64;
     let final_chunk_pos = vec4<f32>(f32(multiplied_chunk_pos.x), f32(multiplied_chunk_pos.y), f32(multiplied_chunk_pos.z), 0);
 
-    let face_transform = FACE_TRANSFORMS[index];
+    let face_transform = FACE_TRANSFORMS[face_normal];
 
-    out.position = push.pv * ((instance_local_pos + face_transform * vec4<f32>(quad_pos, 1.0)) + final_chunk_pos);
+    var stretched_quad_pos = quad_pos;
+    stretched_quad_pos.x = quad_pos.x * f32(h) - f32(h) + 1.0;
+
+    out.position = push.pv * ((instance_local_pos + face_transform * vec4<f32>(stretched_quad_pos, 1.0)) + final_chunk_pos);
     return out;
 };
 

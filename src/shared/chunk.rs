@@ -91,12 +91,12 @@ pub type MeshJob = (Arc<Chunk>, [Option<Arc<Chunk>>; 6]);
 
 impl SendableChunkMesh {
     pub fn make_mesh(job: &MeshJob) -> SendableChunkMesh {
-        let mut points_right = Vec::new();
-        let mut points_left = Vec::new();
-        let mut points_top = Vec::new();
-        let mut points_bottom = Vec::new();
-        let mut points_front = Vec::new();
-        let mut points_back = Vec::new();
+        let points_right = Vec::new();
+        let points_left = Vec::new();
+        let points_top = Vec::new();
+        let points_bottom = Vec::new();
+        let points_front = Vec::new();
+        let points_back = Vec::new();
 
         let neighbor_right = &job.1[0];
         let neighbor_left = &job.1[1];
@@ -137,6 +137,13 @@ impl SendableChunkMesh {
         };
 
         let chunk = &job.0;
+
+        let mut xp_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
+        let mut xm_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
+        let mut yp_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
+        let mut ym_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
+        let mut zp_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
+        let mut zm_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
 
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
@@ -180,90 +187,72 @@ impl SendableChunkMesh {
                     zminus = current_slice & !back_mask[y + CHUNK_SIZE - 1];
                 }
 
-                for i in 0..CHUNK_SIZE {
-                    // x plus bit
-                    let xpb = xplus & (1 << i);
-                    // x minus bit
-                    let xmb = xminus & (1 << i);
-                    let ypb = yplus & (1 << i);
-                    let ymb = yminus & (1 << i);
-                    let zpb = zplus & (1 << i);
-                    let zmb = zminus & (1 << i);
+                xp_faces[i_curr] = xplus;
+                xm_faces[i_curr] = xminus;
+                yp_faces[i_curr] = yplus;
+                ym_faces[i_curr] = yminus;
+                zp_faces[i_curr] = zplus;
+                zm_faces[i_curr] = zminus;
+            }
+        }
 
-                    let point = Vertex {
-                        data: (i
-                            | (y << CHUNK_POS_BITS)
-                            | (z << (CHUNK_POS_BITS * 2))
-                            | (0 << (CHUNK_POS_BITS * 3))) as u32,
-                        id: 1,
-                    };
+        let faces = [xp_faces, xm_faces, yp_faces, ym_faces, zp_faces, zm_faces];
+        let mut directions = [points_right, points_left, points_top, points_bottom, points_front, points_back];
 
-                    const DATA_SIZE: usize = CHUNK_POS_BITS * 3;
+        for i in 0..6 as usize {
+            let face = faces[i];
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    let i_curr = y + z * CHUNK_SIZE;
+                    let mut current_slice = face[i_curr];
+                    let mut total_offset: usize = 0;
 
-                    if xpb != 0 {
+                    while current_slice != 0 {
+                        let tz = current_slice.trailing_zeros();
+
+                        total_offset += tz as usize; 
+                        current_slice >>= tz;
+
+                        if current_slice == 0 {
+                            break;
+                        }
+
+                        let size = current_slice.trailing_ones() as usize;
+
                         let point = Vertex {
-                            data: point.data | (0_u32 << DATA_SIZE),
-                            id: point.id,
+                            data: (total_offset
+                                | (y << CHUNK_POS_BITS)
+                                | (z << (CHUNK_POS_BITS * 2))
+                                | (size << (CHUNK_POS_BITS * 3))) as u32,
+                            id: 1
+                                | ((i as u32) << 16),
                         };
-                        points_right.push(point)
-                    }
-                    if xmb != 0 {
-                        let point = Vertex {
-                            data: point.data | (1_u32 << DATA_SIZE),
-                            id: point.id,
-                        };
-                        points_left.push(point)
-                    }
-                    if ypb != 0 {
-                        let point = Vertex {
-                            data: point.data | (2_u32 << DATA_SIZE),
-                            id: point.id,
-                        };
-                        points_top.push(point)
-                    }
-                    if ymb != 0 {
-                        let point = Vertex {
-                            data: point.data | (3_u32 << DATA_SIZE),
-                            id: point.id,
-                        };
-                        points_bottom.push(point)
-                    }
-                    if zpb != 0 {
-                        let point = Vertex {
-                            data: point.data | (4_u32 << DATA_SIZE),
-                            id: point.id,
-                        };
-                        points_front.push(point)
-                    }
-                    if zmb != 0 {
-                        let point = Vertex {
-                            data: point.data | (5_u32 << DATA_SIZE),
-                            id: point.id,
-                        };
-                        points_back.push(point)
+
+                        directions[i].push(point);
+
+                        if size >= CHUNK_SIZE {
+                            break;
+                        } else {
+                            current_slice >>= size;
+                            total_offset += size;
+                        }
                     }
                 }
             }
         }
 
-        let right_len = points_right.len();
-        let left_len = points_left.len();
-        let top_len = points_top.len();
-        let bottom_len = points_bottom.len();
-        let front_len = points_front.len();
-        let back_len = points_back.len();
-
         let lens = [
-            right_len, left_len, top_len, bottom_len, front_len, back_len,
+            directions[0].len(), directions[1].len(), directions[2].len(), directions[3].len(),
+            directions[4].len(), directions[5].len(),
         ];
 
         let mut points = Vec::<Vertex>::new();
-        points.append(&mut points_right);
-        points.append(&mut points_left);
-        points.append(&mut points_top);
-        points.append(&mut points_bottom);
-        points.append(&mut points_front);
-        points.append(&mut points_back);
+        points.append(&mut directions[0]);
+        points.append(&mut directions[1]);
+        points.append(&mut directions[2]);
+        points.append(&mut directions[3]);
+        points.append(&mut directions[4]);
+        points.append(&mut directions[5]);
 
         let data = bytemuck::cast_slice(&points).to_vec();
 
