@@ -199,29 +199,46 @@ impl SendableChunkMesh {
         // shadowing
         let xp_faces = swap_x_z(&xp_faces);
         let xm_faces = swap_x_z(&xm_faces);
+        let yp_faces = swap_y_z(&yp_faces);
+        let ym_faces = swap_y_z(&ym_faces);
 
         let mut faces = [xp_faces, xm_faces, yp_faces, ym_faces, zp_faces, zm_faces];
         let mut directions = [points_right, points_left, points_top, points_bottom, points_front, points_back];
 
         for i in 0..6 as usize {
-            let face = &mut faces[i];
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
                     let i_curr = y + z * CHUNK_SIZE;
-                    let mut current_slice = face[i_curr];
-                    let mut total_offset: usize = 0;
 
-                    while current_slice != 0 {
-                        let tz = current_slice.trailing_zeros();
+                    if faces[i][i_curr] == 0 {
+                        continue;
+                    }
 
-                        total_offset += tz as usize; 
-                        current_slice >>= tz;
+                    while faces[i][i_curr] != 0 {
+                        let tz = faces[i][i_curr].trailing_zeros();
 
-                        if current_slice == 0 {
-                            break;
+                        let remaining_bits = faces[i][i_curr] >> tz;
+                        let width = remaining_bits.trailing_ones() as usize;
+
+                        let width_mask = if width == CHUNK_SIZE {
+                            !0u64 
+                        } else {
+                            ((1u64 << width) - 1) << tz
+                        };
+
+                        let mut height = 1;
+
+                        for h in 1..(CHUNK_SIZE - y) {
+                            let next_row_idx = (y + h) + z * CHUNK_SIZE;
+                            
+                            if (faces[i][next_row_idx] & width_mask) == width_mask {
+                                height += 1;
+                                
+                                faces[i][next_row_idx] &= !width_mask;
+                            } else {
+                                break;
+                            }
                         }
-
-                        let size = current_slice.trailing_ones() as usize;
 
                         let point: Vertex;
 
@@ -229,17 +246,29 @@ impl SendableChunkMesh {
                             point = Vertex {
                                 data: (z
                                     | (y << CHUNK_POS_BITS)
-                                    | (total_offset << (CHUNK_POS_BITS * 2))
-                                    | (size - 1 << (CHUNK_POS_BITS * 3))) as u32,
+                                    | ((tz as usize) << (CHUNK_POS_BITS * 2))
+                                    | ((width - 1) << (CHUNK_POS_BITS * 3))
+                                    | ((height - 1) << (CHUNK_POS_BITS * 4))) as u32,
+                                id: 1
+                                    | ((i as u32) << 16),
+                            };
+                        } else if i < 4 {
+                            point = Vertex {
+                                data: ((tz as usize)
+                                    | (z << CHUNK_POS_BITS)
+                                    | (y << (CHUNK_POS_BITS * 2))
+                                    | ((width - 1) << (CHUNK_POS_BITS * 3))
+                                    | ((height - 1) << (CHUNK_POS_BITS * 4))) as u32,
                                 id: 1
                                     | ((i as u32) << 16),
                             };
                         } else {
                             point = Vertex {
-                                data: (total_offset
+                                data: ((tz as usize)
                                     | (y << CHUNK_POS_BITS)
                                     | (z << (CHUNK_POS_BITS * 2))
-                                    | (size - 1 << (CHUNK_POS_BITS * 3))) as u32,
+                                    | ((width - 1) << (CHUNK_POS_BITS * 3))
+                                    | ((height - 1) << (CHUNK_POS_BITS * 4))) as u32,
                                 id: 1
                                     | ((i as u32) << 16),
                             };
@@ -247,12 +276,7 @@ impl SendableChunkMesh {
 
                         directions[i].push(point);
 
-                        if size >= CHUNK_SIZE {
-                            break;
-                        } else {
-                            current_slice >>= size;
-                            total_offset += size;
-                        }
+                        faces[i][i_curr] &= !width_mask;
                     }
                 }
             }
@@ -427,4 +451,35 @@ fn swap_x_z(arr: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE]) -> [ChunkBitRow; CHUNK
         }
     }
     new_arr
+}
+
+fn swap_y_z(arr: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE]) -> [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] {
+    let mut new_arr = [0 as ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE];
+    
+    for y in 0..CHUNK_SIZE {
+        for z in 0..CHUNK_SIZE {
+            let original_idx = y + z * CHUNK_SIZE;
+            let new_idx = z + y * CHUNK_SIZE;
+            
+            new_arr[new_idx] = arr[original_idx];
+        }
+    }
+    new_arr
+}
+
+#[inline]
+fn get_bits(value: ChunkBitRow, size: usize, offset: usize) -> ChunkBitRow {
+    let mask: ChunkBitRow = (1 << size) - 1;
+    let shifted_value = value >> offset;
+
+    shifted_value & mask
+}
+
+#[inline]
+fn clear_bits_in_place(value: &mut ChunkBitRow, size: usize, offset: usize) {
+    let ones_mask: ChunkBitRow = (1 << size) - 1;
+    let target_mask = ones_mask << offset;
+    let clearing_mask = !target_mask;
+
+    *value &= clearing_mask;
 }

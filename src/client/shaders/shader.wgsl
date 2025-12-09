@@ -155,6 +155,9 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
         stretched_quad_pos.x = quad_pos.x * f32(h);
     }
 
+    stretched_quad_pos.y = quad_pos.y * f32(w);
+
+
     out.position = push.pv * ((instance_local_pos + face_transform * vec4<f32>(stretched_quad_pos, 1.0)) + final_chunk_pos);
     return out;
 };
