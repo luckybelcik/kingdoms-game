@@ -89,7 +89,8 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     var x = pos & 63;
     var y = (pos >> 6u) & 63;
     var z = (pos >> 12u) & 63;
-    let h = (pos >> 18u) & 63;
+    let h = ((pos >> 18u) & 63) + 1u;
+    let w = ((pos >> 24u) & 63) + 1u;
 
     var transparency: f32 = 1.0;
     if block_id == 0 {
