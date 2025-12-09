@@ -433,6 +433,10 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
                     if ui.button("Regenerate Chunks").clicked() {
                         ui.close();
                     }
+                    if ui.button("Regenerate Meshes").clicked() {
+                        app.dirty_chunks = app.chunks.keys().cloned().collect();
+                        ui.close();
+                    }
                     if ui.button("Change World Size").clicked() {
                         app.ui_state
                             .toggle_popup(PopupWindow::WorldSize(WorldSizePopupData::default()));
@@ -644,6 +648,13 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
                     );
                     ui.checkbox(&mut popup_data.cull_chunk_faces, "Cull Chunk Faces");
 
+                    ui.label(
+                        egui::RichText::new("Meshing Config")
+                            .size(10.0)
+                            .color(Color32::GOLD),
+                    );
+                    ui.checkbox(&mut popup_data.greedy_meshing, "Greedy Meshing");
+
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                             if ui.button("Save").clicked() {
@@ -651,6 +662,8 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
                                     .set_render_textures_bit(popup_data.render_textures);
                                 app.app_render_config
                                     .set_cull_chunk_faces_bit(popup_data.cull_chunk_faces);
+                                app.app_render_config
+                                    .set_greedy_meshing_bit(popup_data.greedy_meshing);
                                 state_to_set_to = Some(PopupWindow::None);
                             }
                             if ui.button("Close").clicked() {

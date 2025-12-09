@@ -129,7 +129,7 @@ impl Renderer {
 
                 let loaded_chunk = chunk.load_full();
 
-                self.job_sender.send((loaded_chunk, nearby_chunks)).unwrap();
+                self.job_sender.send((loaded_chunk, nearby_chunks, render_config.clone())).unwrap();
             }
         }
 

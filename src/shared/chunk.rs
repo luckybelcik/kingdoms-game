@@ -1,9 +1,9 @@
 use std::{collections::HashSet, sync::Arc};
 
-use crate::shared::{
+use crate::{client::rendering::apprenderconfig::AppRenderConfig, shared::{
     constants::{CHUNK_POS_BITS, CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow},
     render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex},
-};
+}};
 use nalgebra_glm as glm;
 use wgpu_buffer_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
@@ -87,7 +87,7 @@ pub struct SendableChunkMesh {
     pub pos: nalgebra_glm::IVec3,
 }
 
-pub type MeshJob = (Arc<Chunk>, [Option<Arc<Chunk>>; 6]);
+pub type MeshJob = (Arc<Chunk>, [Option<Arc<Chunk>>; 6], AppRenderConfig);
 
 impl SendableChunkMesh {
     pub fn make_mesh(job: &MeshJob) -> SendableChunkMesh {
@@ -218,7 +218,12 @@ impl SendableChunkMesh {
                         let tz = faces[i][i_curr].trailing_zeros();
 
                         let remaining_bits = faces[i][i_curr] >> tz;
-                        let width = remaining_bits.trailing_ones() as usize;
+                        let width;
+                        if job.2.get_greedy_meshing_bit() {
+                            width = remaining_bits.trailing_ones() as usize;
+                        } else {
+                            width = 1;
+                        }
 
                         let width_mask = if width == CHUNK_SIZE {
                             !0u64 
@@ -228,15 +233,17 @@ impl SendableChunkMesh {
 
                         let mut height = 1;
 
-                        for h in 1..(CHUNK_SIZE - y) {
-                            let next_row_idx = (y + h) + z * CHUNK_SIZE;
-                            
-                            if (faces[i][next_row_idx] & width_mask) == width_mask {
-                                height += 1;
+                        if job.2.get_greedy_meshing_bit() {
+                            for h in 1..(CHUNK_SIZE - y) {
+                                let next_row_idx = (y + h) + z * CHUNK_SIZE;
                                 
-                                faces[i][next_row_idx] &= !width_mask;
-                            } else {
-                                break;
+                                if (faces[i][next_row_idx] & width_mask) == width_mask {
+                                    height += 1;
+                                    
+                                    faces[i][next_row_idx] &= !width_mask;
+                                } else {
+                                    break;
+                                }
                             }
                         }
 
@@ -465,21 +472,4 @@ fn swap_y_z(arr: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE]) -> [ChunkBitRow; CHUNK
         }
     }
     new_arr
-}
-
-#[inline]
-fn get_bits(value: ChunkBitRow, size: usize, offset: usize) -> ChunkBitRow {
-    let mask: ChunkBitRow = (1 << size) - 1;
-    let shifted_value = value >> offset;
-
-    shifted_value & mask
-}
-
-#[inline]
-fn clear_bits_in_place(value: &mut ChunkBitRow, size: usize, offset: usize) {
-    let ones_mask: ChunkBitRow = (1 << size) - 1;
-    let target_mask = ones_mask << offset;
-    let clearing_mask = !target_mask;
-
-    *value &= clearing_mask;
 }

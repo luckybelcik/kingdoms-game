@@ -33,6 +33,7 @@ pub struct WorldSizePopupData {
 pub struct RenderConfigData {
     pub render_textures: bool,
     pub cull_chunk_faces: bool,
+    pub greedy_meshing: bool,
 }
 
 impl RenderConfigData {
@@ -40,6 +41,7 @@ impl RenderConfigData {
         RenderConfigData {
             render_textures: config.get_render_textures_bit(),
             cull_chunk_faces: config.get_cull_chunk_faces_bit(),
+            greedy_meshing: config.get_greedy_meshing_bit(),
         }
     }
 }
