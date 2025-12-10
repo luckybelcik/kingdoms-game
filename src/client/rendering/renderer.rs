@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
 };
 
@@ -56,8 +56,16 @@ impl Renderer {
         let (mesh_tx, mesh_rx) = std::sync::mpsc::channel::<SendableChunkMesh>();
 
         std::thread::spawn(move || {
+            let mut avg = VecDeque::new();
             for job in mesh_job_rx {
+                let now = std::time::Instant::now();
                 let sendable = SendableChunkMesh::make_mesh(&job);
+                let elapsed = now.elapsed();
+                avg.push_back(elapsed.as_micros());
+                println!("Meshing took {}mcs", avg.iter().sum::<u128>() / avg.len() as u128);
+                if avg.len() > 512 {
+                    avg.pop_front();
+                }
                 mesh_tx.send(sendable).unwrap();
             }
         });
