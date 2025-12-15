@@ -1,9 +1,12 @@
 use std::{collections::HashSet, sync::Arc};
 
-use crate::{client::rendering::apprenderconfig::AppRenderConfig, shared::{
-    constants::{CHUNK_POS_BITS, CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow},
-    render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex},
-}};
+use crate::{
+    client::rendering::apprenderconfig::AppRenderConfig,
+    shared::{
+        constants::{CHUNK_POS_BITS, CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow},
+        render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex},
+    },
+};
 use nalgebra_glm as glm;
 use wgpu_buffer_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
@@ -96,12 +99,18 @@ pub type MeshJob = (Arc<Chunk>, [Option<Arc<Chunk>>; 6], AppRenderConfig);
 
 impl SendableChunkMesh {
     pub fn make_mesh(job: &MeshJob) -> SendableChunkMesh {
-        let mut points_right = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
-        let mut points_left = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
-        let mut points_top = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
-        let mut points_bottom = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
-        let mut points_front = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
-        let mut points_back = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
+        let mut points_right =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
+        let mut points_left =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
+        let mut points_top =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
+        let mut points_bottom =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
+        let mut points_front =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
+        let mut points_back =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * std::mem::size_of::<Vertex>());
 
         let neighbor_right = &job.1[0];
         let neighbor_left = &job.1[1];
@@ -154,18 +163,17 @@ impl SendableChunkMesh {
             for z in 0..CHUNK_SIZE {
                 let i_curr = y + z * CHUNK_SIZE;
 
-                let x = z; 
-                let current_swap_slice = chunk.xz_swap_chunk_mask[y + x * CHUNK_SIZE];
+                let current_swap_slice = chunk.xz_swap_chunk_mask[y + z * CHUNK_SIZE];
 
-                let xminus_neighbor_row = if x < CHUNK_SIZE - 1 {
-                    chunk.xz_swap_chunk_mask[y + (x + 1) * CHUNK_SIZE]
+                let xminus_neighbor_row = if z < CHUNK_SIZE - 1 {
+                    chunk.xz_swap_chunk_mask[y + (z + 1) * CHUNK_SIZE]
                 } else {
                     right_mask[y + 0 * CHUNK_SIZE]
                 };
                 let xminus = current_swap_slice & !xminus_neighbor_row;
 
-                let xplus_neighbor_row = if x > 0 {
-                    chunk.xz_swap_chunk_mask[y + (x - 1) * CHUNK_SIZE]
+                let xplus_neighbor_row = if z > 0 {
+                    chunk.xz_swap_chunk_mask[y + (z - 1) * CHUNK_SIZE]
                 } else {
                     left_mask[y + (CHUNK_SIZE - 1) * CHUNK_SIZE]
                 };
@@ -218,8 +226,22 @@ impl SendableChunkMesh {
         let mut yp_faces = swap_y_z(&yp_faces);
         let mut ym_faces = swap_y_z(&ym_faces);
 
-        let faces = [&mut xp_faces, &mut xm_faces, &mut yp_faces, &mut ym_faces, &mut zp_faces, &mut zm_faces];
-        let directions = [&mut points_right, &mut  points_left, &mut  points_top, &mut  points_bottom, &mut  points_front, &mut  points_back];
+        let faces = [
+            &mut xp_faces,
+            &mut xm_faces,
+            &mut yp_faces,
+            &mut ym_faces,
+            &mut zp_faces,
+            &mut zm_faces,
+        ];
+        let directions = [
+            &mut points_right,
+            &mut points_left,
+            &mut points_top,
+            &mut points_bottom,
+            &mut points_front,
+            &mut points_back,
+        ];
         let mut face_amounts = [0; 6];
 
         for i in 0..6 as usize {
@@ -243,7 +265,7 @@ impl SendableChunkMesh {
                         }
 
                         let width_mask = if width == CHUNK_SIZE {
-                            !0u64 
+                            !0u64
                         } else {
                             ((1u64 << width) - 1) << tz
                         };
@@ -253,10 +275,10 @@ impl SendableChunkMesh {
                         if job.2.get_greedy_meshing_bit() {
                             for h in 1..(CHUNK_SIZE - y) {
                                 let next_row_idx = (y + h) + z * CHUNK_SIZE;
-                                
+
                                 if (faces[i][next_row_idx] & width_mask) == width_mask {
                                     height += 1;
-                                    
+
                                     faces[i][next_row_idx] &= !width_mask;
                                 } else {
                                     break;
@@ -272,9 +294,9 @@ impl SendableChunkMesh {
                                     | (y << CHUNK_POS_BITS)
                                     | ((tz as usize) << (CHUNK_POS_BITS * 2))
                                     | ((width - 1) << (CHUNK_POS_BITS * 3))
-                                    | ((height - 1) << (CHUNK_POS_BITS * 4))) as u32,
-                                id: 1
-                                    | ((i as u32) << 16),
+                                    | ((height - 1) << (CHUNK_POS_BITS * 4)))
+                                    as u32,
+                                id: 1 | ((i as u32) << 16),
                             };
                         } else if i < 4 {
                             point = Vertex {
@@ -282,9 +304,9 @@ impl SendableChunkMesh {
                                     | (z << CHUNK_POS_BITS)
                                     | (y << (CHUNK_POS_BITS * 2))
                                     | ((width - 1) << (CHUNK_POS_BITS * 3))
-                                    | ((height - 1) << (CHUNK_POS_BITS * 4))) as u32,
-                                id: 1
-                                    | ((i as u32) << 16),
+                                    | ((height - 1) << (CHUNK_POS_BITS * 4)))
+                                    as u32,
+                                id: 1 | ((i as u32) << 16),
                             };
                         } else {
                             point = Vertex {
@@ -292,9 +314,9 @@ impl SendableChunkMesh {
                                     | (y << CHUNK_POS_BITS)
                                     | (z << (CHUNK_POS_BITS * 2))
                                     | ((width - 1) << (CHUNK_POS_BITS * 3))
-                                    | ((height - 1) << (CHUNK_POS_BITS * 4))) as u32,
-                                id: 1
-                                    | ((i as u32) << 16),
+                                    | ((height - 1) << (CHUNK_POS_BITS * 4)))
+                                    as u32,
+                                id: 1 | ((i as u32) << 16),
                             };
                         }
 
@@ -455,14 +477,16 @@ impl StoredChunkMesh {
     }
 }
 
-fn swap_y_z(arr: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE]) -> [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] {
+fn swap_y_z(
+    arr: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE],
+) -> [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] {
     let mut new_arr = [0 as ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE];
-    
+
     for y in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
             let original_idx = y + z * CHUNK_SIZE;
             let new_idx = z + y * CHUNK_SIZE;
-            
+
             new_arr[new_idx] = arr[original_idx];
         }
     }
