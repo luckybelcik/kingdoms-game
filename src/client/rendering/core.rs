@@ -2,12 +2,10 @@ use std::collections::HashMap;
 
 use crate::{
     client::rendering::{
-        apprenderconfig::AppRenderConfig, render_results::RenderResults, renderer::Renderer,
+        apprenderconfig::AppRenderConfig, client_chunk::ClientChunk, render_results::RenderResults,
+        renderer::Renderer,
     },
-    shared::{
-        chunk::Chunk,
-        render::{push_constants::PushConstants, vertex::Vertex},
-    },
+    shared::render::{push_constants::PushConstants, vertex::Vertex},
 };
 use arc_swap::ArcSwap;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -64,7 +62,7 @@ impl Scene {
     pub fn render<'rpass>(
         &'rpass self,
         renderpass: &mut wgpu::RenderPass<'rpass>,
-        chunks: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+        chunks: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
         camera_rot: nalgebra_glm::Vec3,
         camera_pos: nalgebra_glm::Vec3,
         aspect_ratio: f32,
@@ -90,17 +88,17 @@ impl Scene {
         let mut results = RenderResults::default();
 
         for chunk in chunks.values() {
-            let loaded_chunk = chunk.load();
-            let mut draw_calls = loaded_chunk.mesh.get_draw_calls();
-            let culled_calls = loaded_chunk
+            let loaded_client_chunk = chunk.load();
+            let mut draw_calls = loaded_client_chunk.mesh.get_draw_calls();
+            let culled_calls = loaded_client_chunk
                 .mesh
-                .get_visible_draw_calls(camera_pos, loaded_chunk.get_chunk_pos());
+                .get_visible_draw_calls(camera_pos, loaded_client_chunk.chunk.get_chunk_pos());
 
             if culled_calls.is_empty() {
                 continue;
             }
 
-            PushConstants::update_chunk_pos(renderpass, loaded_chunk.get_chunk_pos());
+            PushConstants::update_chunk_pos(renderpass, loaded_client_chunk.chunk.get_chunk_pos());
 
             if render_config.get_cull_chunk_faces_bit() {
                 draw_calls = &culled_calls;

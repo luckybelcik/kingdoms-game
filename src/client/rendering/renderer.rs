@@ -1,16 +1,18 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     sync::Arc,
 };
 
 use arc_swap::ArcSwap;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
-use crate::{
-    client::rendering::{
-        apprenderconfig::AppRenderConfig, core::Scene, gpu::Gpu, render_results::RenderResults,
-    },
-    shared::chunk::{Chunk, MeshJob, SendableChunkMesh},
+use crate::client::rendering::{
+    apprenderconfig::AppRenderConfig,
+    chunk_mesh::{MeshJob, SendableChunkMesh},
+    client_chunk::ClientChunk,
+    core::Scene,
+    gpu::Gpu,
+    render_results::RenderResults,
 };
 
 pub struct Renderer {
@@ -56,16 +58,8 @@ impl Renderer {
         let (mesh_tx, mesh_rx) = std::sync::mpsc::channel::<SendableChunkMesh>();
 
         std::thread::spawn(move || {
-            let mut avg = VecDeque::new();
             for job in mesh_job_rx {
-                let now = std::time::Instant::now();
                 let sendable = SendableChunkMesh::make_mesh(&job);
-                let elapsed = now.elapsed();
-                avg.push_back(elapsed.as_micros());
-                println!("Meshing took {}mcs", avg.iter().sum::<u128>() / avg.len() as u128);
-                if avg.len() > 512 {
-                    avg.pop_front();
-                }
                 mesh_tx.send(sendable).unwrap();
             }
         });
@@ -91,7 +85,7 @@ impl Renderer {
         screen_descriptor: egui_wgpu::ScreenDescriptor,
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
-        chunks_mut: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+        chunks_mut: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
         dirty_chunks: &mut HashSet<nalgebra_glm::IVec3>,
         camera_pos: nalgebra_glm::Vec3,
         camera_rot: nalgebra_glm::Vec3,
@@ -126,7 +120,7 @@ impl Renderer {
                 let chunk_pos_forward = nalgebra_glm::vec3(key.x, key.y, key.z + 1);
                 let chunk_pos_backward = nalgebra_glm::vec3(key.x, key.y, key.z - 1);
 
-                let nearby_chunks: [Option<Arc<Chunk>>; 6] = [
+                let nearby_chunks: [Option<Arc<ClientChunk>>; 6] = [
                     chunks_mut.get(&chunk_pos_right).map(|c| c.load_full()),
                     chunks_mut.get(&chunk_pos_left).map(|c| c.load_full()),
                     chunks_mut.get(&chunk_pos_up).map(|c| c.load_full()),
@@ -137,7 +131,9 @@ impl Renderer {
 
                 let loaded_chunk = chunk.load_full();
 
-                self.job_sender.send((loaded_chunk, nearby_chunks, render_config.clone())).unwrap();
+                self.job_sender
+                    .send((loaded_chunk, nearby_chunks, render_config.clone()))
+                    .unwrap();
             }
         }
 

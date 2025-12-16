@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use arc_swap::ArcSwap;
 
-use crate::shared::{chunk::Chunk, constants::CHUNK_SIZE};
+use crate::{client::rendering::client_chunk::ClientChunk, shared::constants::CHUNK_SIZE};
 
 pub fn cast_ray_block_hit(
     camera_pos: nalgebra_glm::Vec3,
     camera_rot: nalgebra_glm::Vec3,
-    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
 ) -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
     let ray_pos = camera_pos;
     let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
@@ -30,6 +30,7 @@ pub fn cast_ray_block_hit(
         chunk_z_start,
     )) && chunk
         .load()
+        .chunk
         .get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start)
         != 0
     {
@@ -105,7 +106,7 @@ pub fn cast_ray_block_hit(
         let crz = wrap_to_chunk_coord(current_block_pos.z);
 
         if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z))
-            && chunk.load().get_block(crx, cry, crz) != 0
+            && chunk.load().chunk.get_block(crx, cry, crz) != 0
         {
             let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
 
@@ -119,7 +120,7 @@ pub fn cast_ray_block_hit(
 pub fn cast_ray_block_before(
     camera_pos: nalgebra_glm::Vec3,
     camera_rot: nalgebra_glm::Vec3,
-    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
 ) -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
     let ray_pos = camera_pos;
     let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
@@ -142,6 +143,7 @@ pub fn cast_ray_block_before(
         chunk_z_start,
     )) && chunk
         .load()
+        .chunk
         .get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start)
         != 0
     {
@@ -217,7 +219,7 @@ pub fn cast_ray_block_before(
         let c_crz = wrap_to_chunk_coord(current_block_pos.z);
 
         if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(c_chunk_x, c_chunk_y, c_chunk_z))
-            && chunk.load().get_block(c_crx, c_cry, c_crz) != 0
+            && chunk.load().chunk.get_block(c_crx, c_cry, c_crz) != 0
         {
             let chunk_pos = nalgebra_glm::vec3(p_chunk_x, p_chunk_y, p_chunk_z);
             return Some((chunk_pos, (p_crx, p_cry, p_crz)));

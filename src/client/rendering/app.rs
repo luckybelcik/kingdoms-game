@@ -14,12 +14,13 @@ use winit::{
 
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
+use crate::client::rendering::client_chunk::ClientChunk;
 use crate::client::rendering::render_results::RenderResults;
+use crate::client::rendering::renderer::Renderer;
 use crate::client::rendering::ui_state::{
     PopupWindow, RenderConfigData, UIState, WorldSizePopupData,
 };
 use crate::client::rendering::util::{cast_ray_block_before, cast_ray_block_hit};
-use crate::{client::rendering::renderer::Renderer, shared::chunk::Chunk};
 
 const CHUNKS_WIDTH: i32 = 16;
 const CHUNKS_LENGTH: i32 = 16;
@@ -31,7 +32,7 @@ pub struct App {
     pub renderer: Option<Renderer>,
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
-    pub chunks: HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
+    pub chunks: HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
     pub dirty_chunks: HashSet<nalgebra_glm::IVec3>,
     pub app_info: AppInfo,
     pub app_render_config: AppRenderConfig,
@@ -92,13 +93,14 @@ impl ApplicationHandler for App {
         self.gui_state = Some(gui_state);
         app_info.last_render_time = Some(Instant::now());
 
-        let mut chunks = HashMap::<nalgebra_glm::IVec3, ArcSwap<Chunk>>::new();
+        let mut chunks = HashMap::<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>::new();
         for i in 0..CHUNKS_WIDTH {
             for j in 0..CHUNKS_LENGTH {
                 for k in 0..CHUNKS_HEIGHT {
-                    let chunk = Chunk::new_full(i, k, j);
-                    chunks.insert(nalgebra_glm::vec3(i, k, j), ArcSwap::new(Arc::new(chunk)));
-                    self.dirty_chunks.insert(nalgebra_glm::vec3(i, k, j));
+                    let pos = nalgebra_glm::vec3(i, k, j);
+                    let chunk = ClientChunk::new_full(pos);
+                    chunks.insert(pos, ArcSwap::new(Arc::new(chunk)));
+                    self.dirty_chunks.insert(pos);
                 }
             }
         }
@@ -216,9 +218,11 @@ impl App {
             && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
         {
             log::info!("Break block at {} {} {}", x, y, z);
-            let mut new_chunk = (*(chunk.load_full())).clone();
-            new_chunk.set_block(x, y, z, 0, &mut self.dirty_chunks);
-            chunk.store(Arc::new(new_chunk));
+            let mut new_client_chunk = (*(chunk.load_full())).clone();
+            new_client_chunk
+                .chunk
+                .set_block(x, y, z, 0, &mut self.dirty_chunks);
+            chunk.store(Arc::new(new_client_chunk));
         }
         if let PhysicalKey::Code(KeyCode::Period) = event.physical_key
             && event.state == ElementState::Pressed
@@ -230,9 +234,11 @@ impl App {
             && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
         {
             log::info!("Place block at {} {} {}", x, y, z);
-            let mut new_chunk = (*(chunk.load_full())).clone();
-            new_chunk.set_block(x, y, z, 1, &mut self.dirty_chunks);
-            chunk.store(Arc::new(new_chunk));
+            let mut new_client_chunk = (*(chunk.load_full())).clone();
+            new_client_chunk
+                .chunk
+                .set_block(x, y, z, 1, &mut self.dirty_chunks);
+            chunk.store(Arc::new(new_client_chunk));
         }
         if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key
             && event.state == ElementState::Pressed
