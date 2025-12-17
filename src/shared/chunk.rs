@@ -8,9 +8,9 @@ use crate::shared::{
 #[derive(Clone, Debug)]
 pub struct Chunk {
     chunk_pos: ChunkPos,
-    blocks: [u16; CHUNK_VOLUME],
-    pub chunk_mask: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE],
-    pub xz_swap_chunk_mask: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE],
+    blocks: Vec<u16>,
+    pub chunk_mask: Vec<ChunkBitRow>,
+    pub xz_swap_chunk_mask: Vec<ChunkBitRow>,
 }
 
 impl Chunk {
@@ -21,9 +21,9 @@ impl Chunk {
     fn new(chunk_pos: ChunkPos) -> Self {
         Self {
             chunk_pos,
-            blocks: [0; CHUNK_VOLUME],
-            chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE],
-            xz_swap_chunk_mask: [0; CHUNK_SIZE * CHUNK_SIZE],
+            blocks: vec![0; CHUNK_VOLUME],
+            chunk_mask: vec![0; CHUNK_SIZE * CHUNK_SIZE],
+            xz_swap_chunk_mask: vec![0; CHUNK_SIZE * CHUNK_SIZE],
         }
     }
 

@@ -49,32 +49,32 @@ impl SendableChunkMesh {
         let right_mask = if let Some(n_right) = neighbor_right {
             &n_right.chunk.xz_swap_chunk_mask
         } else {
-            &[0; CHUNK_SIZE * CHUNK_SIZE]
+            &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let left_mask = if let Some(n_left) = neighbor_left {
             &n_left.chunk.xz_swap_chunk_mask
         } else {
-            &[0; CHUNK_SIZE * CHUNK_SIZE]
+            &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let top_mask = if let Some(n_top) = neighbor_up {
             &n_top.chunk.chunk_mask
         } else {
-            &[0; CHUNK_SIZE * CHUNK_SIZE]
+            &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let bottom_mask = if let Some(n_bottom) = neighbor_down {
             &n_bottom.chunk.chunk_mask
         } else {
-            &[0; CHUNK_SIZE * CHUNK_SIZE]
+            &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let front_mask = if let Some(n_front) = neighbor_front {
             &n_front.chunk.chunk_mask
         } else {
-            &[0; CHUNK_SIZE * CHUNK_SIZE]
+            &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let back_mask = if let Some(n_back) = neighbor_back {
             &n_back.chunk.chunk_mask
         } else {
-            &[0; CHUNK_SIZE * CHUNK_SIZE]
+            &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
 
         let client_chunk = &job.0;
