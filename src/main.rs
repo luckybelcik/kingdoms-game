@@ -34,6 +34,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             server.add_local_player(player_id_clone, server_sender, client_receiver);
 
             loop {
+                server.update();
+
                 let mut packets = Vec::new();
 
                 for player in server.players.values() {
@@ -52,6 +54,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for packet in packets {
                     server.handle_client_packet(packet);
                 }
+
+                server.load_chunks();
             }
         });
 

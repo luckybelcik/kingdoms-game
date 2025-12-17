@@ -1,9 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::{
-        Arc,
-        mpsc::{Receiver, Sender},
-    },
+    sync::mpsc::{Receiver, Sender},
     time::Instant,
 };
 
@@ -23,6 +20,7 @@ pub struct Server {
     pub chunks: HashMap<nalgebra_glm::IVec3, ArcSwap<Chunk>>,
     pub dirty_chunks: HashSet<nalgebra_glm::IVec3>,
     pub players: HashMap<PlayerId, PlayerData>,
+    pub tick: u128,
 }
 
 impl Server {
@@ -31,6 +29,7 @@ impl Server {
             chunks: HashMap::new(),
             dirty_chunks: HashSet::new(),
             players: HashMap::new(),
+            tick: 0,
         }
     }
 
@@ -60,5 +59,13 @@ impl Server {
         }
     }
 
-    pub fn load_chunk(&mut self) {}
+    pub fn load_chunks(&mut self) {
+        for player in self.players.values() {
+            unimplemented!("cant load chunks, sowwy! :3")
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.tick += 1;
+    }
 }
