@@ -4,10 +4,10 @@ use crate::{
     client::rendering::{apprenderconfig::AppRenderConfig, client_chunk::ClientChunk},
     shared::{
         constants::{CHUNK_POS_BITS, CHUNK_SIZE, ChunkBitRow},
+        coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
         render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex},
     },
 };
-use nalgebra_glm as glm;
 use wgpu_buffer_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
 const DATA_PADDING_SIZE_IN_SSBO: u64 = 32;
@@ -15,7 +15,7 @@ const DATA_PADDING_SIZE_IN_SSBO: u64 = 32;
 pub struct SendableChunkMesh {
     pub data: Vec<u8>,
     pub lens: [usize; 6],
-    pub pos: nalgebra_glm::IVec3,
+    pub pos: ChunkPos,
 }
 
 pub type MeshJob = (
@@ -353,31 +353,29 @@ impl StoredChunkMesh {
 
     pub fn get_visible_draw_calls(
         &self,
-        camera_pos: glm::Vec3,
-        chunk_pos: glm::IVec3,
+        camera_pos: EntityPos,
+        chunk_pos: ChunkPos,
     ) -> Vec<ChunkDrawCallInfo> {
         let mut face_visible = [true; 6];
 
-        let cam_chunk_pos_x = (camera_pos.x / (CHUNK_SIZE as f32)).floor() as i32;
-        let cam_chunk_pos_y = (camera_pos.y / (CHUNK_SIZE as f32)).floor() as i32;
-        let cam_chunk_pos_z = (camera_pos.z / (CHUNK_SIZE as f32)).floor() as i32;
+        let cam_chunk_pos: ChunkPos = camera_pos.to_block_pos().into();
 
-        if cam_chunk_pos_x > chunk_pos.x {
+        if cam_chunk_pos.x > chunk_pos.x {
             face_visible[0] = false;
         }
-        if cam_chunk_pos_x < chunk_pos.x {
+        if cam_chunk_pos.x < chunk_pos.x {
             face_visible[1] = false;
         }
-        if cam_chunk_pos_y < chunk_pos.y {
+        if cam_chunk_pos.y < chunk_pos.y {
             face_visible[2] = false;
         }
-        if cam_chunk_pos_y > chunk_pos.y {
+        if cam_chunk_pos.y > chunk_pos.y {
             face_visible[3] = false;
         }
-        if cam_chunk_pos_z < chunk_pos.z {
+        if cam_chunk_pos.z < chunk_pos.z {
             face_visible[4] = false;
         }
-        if cam_chunk_pos_z > chunk_pos.z {
+        if cam_chunk_pos.z > chunk_pos.z {
             face_visible[5] = false;
         }
 

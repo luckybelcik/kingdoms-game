@@ -25,6 +25,8 @@ use crate::client::rendering::util::{cast_ray_block_before, cast_ray_block_hit};
 use crate::shared::communication::client_packet::ClientPacket;
 use crate::shared::communication::player_id::PlayerId;
 use crate::shared::communication::server_packet::ServerPacket;
+use crate::shared::coordinate_systems::chunk_pos::ChunkPos;
+use crate::shared::coordinate_systems::entity_pos::EntityPos;
 
 #[derive(Default)]
 pub struct App {
@@ -32,8 +34,8 @@ pub struct App {
     pub renderer: Option<Renderer>,
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
-    pub chunks: HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
-    pub dirty_chunks: HashSet<nalgebra_glm::IVec3>,
+    pub chunks: HashMap<ChunkPos, ArcSwap<ClientChunk>>,
+    pub dirty_chunks: HashSet<ChunkPos>,
     pub app_info: AppInfo,
     pub app_render_config: AppRenderConfig,
     render_results: RenderResults,
@@ -120,9 +122,9 @@ impl ApplicationHandler for App {
         self.gui_state = Some(gui_state);
         app_info.last_render_time = Some(Instant::now());
 
-        self.chunks = HashMap::<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>::new();
+        self.chunks = HashMap::<ChunkPos, ArcSwap<ClientChunk>>::new();
 
-        app_info.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);
+        app_info.camera_pos = EntityPos::new(-10.0, 5.0, -10.0);
         app_info.camera_rot = nalgebra_glm::vec3(0.0, 0.0, 0.0);
 
         self.app_info = app_info;
@@ -225,34 +227,44 @@ impl App {
         }
         if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key
             && event.state == ElementState::Pressed
-            && let Some((chunk_pos, (x, y, z))) = cast_ray_block_hit(
+            && let Some((chunk_pos, chunk_relative)) = cast_ray_block_hit(
                 self.app_info.camera_pos,
                 self.app_info.camera_rot,
                 &self.chunks,
             )
             && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
         {
-            log::info!("Break block at {} {} {}", x, y, z);
+            log::info!(
+                "Break block at {} {} {}",
+                chunk_relative.x,
+                chunk_relative.y,
+                chunk_relative.z
+            );
             let mut new_client_chunk = (*(chunk.load_full())).clone();
             new_client_chunk
                 .chunk
-                .set_block(x, y, z, 0, &mut self.dirty_chunks);
+                .set_block(chunk_relative, 0, &mut self.dirty_chunks);
             chunk.store(Arc::new(new_client_chunk));
         }
         if let PhysicalKey::Code(KeyCode::Period) = event.physical_key
             && event.state == ElementState::Pressed
-            && let Some((chunk_pos, (x, y, z))) = cast_ray_block_before(
+            && let Some((chunk_pos, chunk_relative)) = cast_ray_block_before(
                 self.app_info.camera_pos,
                 self.app_info.camera_rot,
                 &self.chunks,
             )
             && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
         {
-            log::info!("Place block at {} {} {}", x, y, z);
+            log::info!(
+                "Place block at {} {} {}",
+                chunk_relative.x,
+                chunk_relative.y,
+                chunk_relative.z
+            );
             let mut new_client_chunk = (*(chunk.load_full())).clone();
             new_client_chunk
                 .chunk
-                .set_block(x, y, z, 1, &mut self.dirty_chunks);
+                .set_block(chunk_relative, 1, &mut self.dirty_chunks);
             chunk.store(Arc::new(new_client_chunk));
         }
         if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key

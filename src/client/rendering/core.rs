@@ -5,7 +5,10 @@ use crate::{
         apprenderconfig::AppRenderConfig, client_chunk::ClientChunk, render_results::RenderResults,
         renderer::Renderer,
     },
-    shared::render::{push_constants::PushConstants, vertex::Vertex},
+    shared::{
+        coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
+        render::{push_constants::PushConstants, vertex::Vertex},
+    },
 };
 use arc_swap::ArcSwap;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -62,9 +65,9 @@ impl Scene {
     pub fn render<'rpass>(
         &'rpass self,
         renderpass: &mut wgpu::RenderPass<'rpass>,
-        chunks: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
+        chunks: &mut HashMap<ChunkPos, ArcSwap<ClientChunk>>,
         camera_rot: nalgebra_glm::Vec3,
-        camera_pos: nalgebra_glm::Vec3,
+        camera_pos: EntityPos,
         aspect_ratio: f32,
         render_config: &AppRenderConfig,
     ) -> RenderResults {

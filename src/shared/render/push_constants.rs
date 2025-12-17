@@ -1,5 +1,9 @@
 use crate::{
-    client::rendering::apprenderconfig::AppRenderConfig, shared::render::per_draw_data::PerDrawData,
+    client::rendering::apprenderconfig::AppRenderConfig,
+    shared::{
+        coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
+        render::per_draw_data::PerDrawData,
+    },
 };
 
 #[repr(C)]
@@ -30,7 +34,7 @@ impl PushConstants {
     #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn update_vp_matrix(
         renderpass: &mut wgpu::RenderPass<'_>,
-        camera_pos: nalgebra_glm::Vec3,
+        camera_pos: EntityPos,
         camera_rot: nalgebra_glm::Vec3,
         aspect_ratio: f32,
     ) {
@@ -38,7 +42,7 @@ impl PushConstants {
             nalgebra_glm::perspective_lh_zo(aspect_ratio, 80_f32.to_radians(), 0.1, 1000.0);
         let view = nalgebra_glm::look_at_lh(
             &camera_pos,
-            &(camera_pos + camera_forward(camera_rot)),
+            &(*camera_pos + camera_forward(camera_rot)),
             &nalgebra_glm::Vec3::y(),
         );
         renderpass.set_push_constants(
@@ -72,8 +76,7 @@ impl PushConstants {
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
-    pub fn update_chunk_pos(renderpass: &mut wgpu::RenderPass<'_>, chunk_pos: nalgebra_glm::IVec3) {
-        let chunk_pos = [chunk_pos.x, chunk_pos.y, chunk_pos.z];
+    pub fn update_chunk_pos(renderpass: &mut wgpu::RenderPass<'_>, chunk_pos: ChunkPos) {
         renderpass.set_push_constants(
             wgpu::ShaderStages::VERTEX,
             ARG_1_SIZE + ARG_2_SIZE + ARG_3_SIZE + 4,

@@ -1,3 +1,5 @@
+#![feature(int_roundings)]
+
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
 

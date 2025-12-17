@@ -42,8 +42,10 @@ impl Server {
         let player_data = PlayerData {
             name: "Local".to_string(),
             position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
+            chunk_tick_position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
             connection_type: ConnectionType::Local(server_sender, client_receiver),
             last_ping: Instant::now(),
+            render_distance: 8,
         };
         self.players.insert(player_id, player_data);
     }

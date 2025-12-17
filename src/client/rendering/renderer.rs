@@ -6,13 +6,16 @@ use std::{
 use arc_swap::ArcSwap;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
-use crate::client::rendering::{
-    apprenderconfig::AppRenderConfig,
-    chunk_mesh::{MeshJob, SendableChunkMesh},
-    client_chunk::ClientChunk,
-    core::Scene,
-    gpu::Gpu,
-    render_results::RenderResults,
+use crate::{
+    client::rendering::{
+        apprenderconfig::AppRenderConfig,
+        chunk_mesh::{MeshJob, SendableChunkMesh},
+        client_chunk::ClientChunk,
+        core::Scene,
+        gpu::Gpu,
+        render_results::RenderResults,
+    },
+    shared::coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
 };
 
 pub struct Renderer {
@@ -85,9 +88,9 @@ impl Renderer {
         screen_descriptor: egui_wgpu::ScreenDescriptor,
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
-        chunks_mut: &mut HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
-        dirty_chunks: &mut HashSet<nalgebra_glm::IVec3>,
-        camera_pos: nalgebra_glm::Vec3,
+        chunks_mut: &mut HashMap<ChunkPos, ArcSwap<ClientChunk>>,
+        dirty_chunks: &mut HashSet<ChunkPos>,
+        camera_pos: EntityPos,
         camera_rot: nalgebra_glm::Vec3,
         render_config: &AppRenderConfig,
     ) -> RenderResults {
@@ -113,12 +116,12 @@ impl Renderer {
 
         for key in dirty_keys.iter() {
             if let Some(chunk) = chunks_mut.get(key) {
-                let chunk_pos_right = nalgebra_glm::vec3(key.x + 1, key.y, key.z);
-                let chunk_pos_left = nalgebra_glm::vec3(key.x - 1, key.y, key.z);
-                let chunk_pos_up = nalgebra_glm::vec3(key.x, key.y + 1, key.z);
-                let chunk_pos_down = nalgebra_glm::vec3(key.x, key.y - 1, key.z);
-                let chunk_pos_forward = nalgebra_glm::vec3(key.x, key.y, key.z + 1);
-                let chunk_pos_backward = nalgebra_glm::vec3(key.x, key.y, key.z - 1);
+                let chunk_pos_right = ChunkPos::new(key.x + 1, key.y, key.z);
+                let chunk_pos_left = ChunkPos::new(key.x - 1, key.y, key.z);
+                let chunk_pos_up = ChunkPos::new(key.x, key.y + 1, key.z);
+                let chunk_pos_down = ChunkPos::new(key.x, key.y - 1, key.z);
+                let chunk_pos_forward = ChunkPos::new(key.x, key.y, key.z + 1);
+                let chunk_pos_backward = ChunkPos::new(key.x, key.y, key.z - 1);
 
                 let nearby_chunks: [Option<Arc<ClientChunk>>; 6] = [
                     chunks_mut.get(&chunk_pos_right).map(|c| c.load_full()),

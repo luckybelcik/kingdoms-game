@@ -2,49 +2,30 @@ use std::collections::HashMap;
 
 use arc_swap::ArcSwap;
 
-use crate::{client::rendering::client_chunk::ClientChunk, shared::constants::CHUNK_SIZE};
+use crate::{
+    client::rendering::client_chunk::ClientChunk,
+    shared::coordinate_systems::{
+        block_pos::BlockPos, chunk_pos::ChunkPos, chunk_relative::ChunkRelative,
+        entity_pos::EntityPos,
+    },
+};
 
 pub fn cast_ray_block_hit(
-    camera_pos: nalgebra_glm::Vec3,
+    camera_pos: EntityPos,
     camera_rot: nalgebra_glm::Vec3,
-    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
-) -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
+    chunks: &HashMap<ChunkPos, ArcSwap<ClientChunk>>,
+) -> Option<(ChunkPos, ChunkRelative)> {
     let ray_pos = camera_pos;
-    let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
+    let mut current_block_pos: BlockPos = camera_pos.into();
 
-    let (chunk_x_start, chunk_y_start, chunk_z_start) = (
-        ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-        ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-        ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-    );
+    let chunk_pos: ChunkPos = current_block_pos.into();
 
-    let (chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) = (
-        wrap_to_chunk_coord(current_block_pos.x),
-        wrap_to_chunk_coord(current_block_pos.y),
-        wrap_to_chunk_coord(current_block_pos.z),
-    );
+    let chunk_relative_pos: ChunkRelative = current_block_pos.into();
 
-    if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(
-        chunk_x_start,
-        chunk_y_start,
-        chunk_z_start,
-    )) && chunk
-        .load()
-        .chunk
-        .get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start)
-        != 0
+    if let Some(chunk) = chunks.get(&chunk_pos)
+        && chunk.load().chunk.get_block(chunk_relative_pos) != 0
     {
-        let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-
-        let crx = wrap_to_chunk_coord(current_block_pos.x);
-        let cry = wrap_to_chunk_coord(current_block_pos.y);
-        let crz = wrap_to_chunk_coord(current_block_pos.z);
-
-        let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
-
-        return Some((chunk_pos, (crx, cry, crz)));
+        return Some((chunk_pos, chunk_relative_pos));
     };
 
     let pitch = camera_rot.x;
@@ -69,7 +50,7 @@ pub fn cast_ray_block_hit(
     }
 
     let next_boundary =
-        (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
+        (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - *ray_pos;
 
     let mut t_max = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
 
@@ -97,57 +78,36 @@ pub fn cast_ray_block_hit(
             t_max.z += t_delta.z;
         }
 
-        let chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+        let new_chunk_pos: ChunkPos = current_block_pos.into();
 
-        let crx = wrap_to_chunk_coord(current_block_pos.x);
-        let cry = wrap_to_chunk_coord(current_block_pos.y);
-        let crz = wrap_to_chunk_coord(current_block_pos.z);
+        let new_chunk_relative: ChunkRelative = current_block_pos.into();
 
-        if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z))
-            && chunk.load().chunk.get_block(crx, cry, crz) != 0
+        if let Some(chunk) = chunks.get(&new_chunk_pos)
+            && chunk.load().chunk.get_block(new_chunk_relative) != 0
         {
-            let chunk_pos = nalgebra_glm::vec3(chunk_x, chunk_y, chunk_z);
-
-            return Some((chunk_pos, (crx, cry, crz)));
-        }
+            return Some((new_chunk_pos, new_chunk_relative));
+        };
     }
 
     None
 }
 
 pub fn cast_ray_block_before(
-    camera_pos: nalgebra_glm::Vec3,
+    camera_pos: EntityPos,
     camera_rot: nalgebra_glm::Vec3,
-    chunks: &HashMap<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>,
-) -> Option<(nalgebra_glm::IVec3, (usize, usize, usize))> {
+    chunks: &HashMap<ChunkPos, ArcSwap<ClientChunk>>,
+) -> Option<(ChunkPos, ChunkRelative)> {
     let ray_pos = camera_pos;
-    let mut current_block_pos = nalgebra_glm::floor(&ray_pos).map(|c| c as i32);
+    let mut current_block_pos: BlockPos = camera_pos.into();
 
-    let (chunk_x_start, chunk_y_start, chunk_z_start) = (
-        ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-        ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-        ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32,
-    );
+    let chunk_pos: ChunkPos = current_block_pos.into();
 
-    let (chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start) = (
-        wrap_to_chunk_coord(current_block_pos.x),
-        wrap_to_chunk_coord(current_block_pos.y),
-        wrap_to_chunk_coord(current_block_pos.z),
-    );
+    let chunk_relative_pos: ChunkRelative = current_block_pos.into();
 
-    if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(
-        chunk_x_start,
-        chunk_y_start,
-        chunk_z_start,
-    )) && chunk
-        .load()
-        .chunk
-        .get_block(chunk_rel_x_start, chunk_rel_y_start, chunk_rel_z_start)
-        != 0
+    if let Some(chunk) = chunks.get(&chunk_pos)
+        && chunk.load().chunk.get_block(chunk_relative_pos) != 0
     {
-        return None;
+        return Some((chunk_pos, chunk_relative_pos));
     };
 
     let pitch = camera_rot.x;
@@ -172,7 +132,7 @@ pub fn cast_ray_block_before(
     }
 
     let next_boundary =
-        (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - ray_pos;
+        (current_block_pos.map(|c| c as f32) + step.map(|c| (c > 0) as i32 as f32)) - *ray_pos;
 
     let mut t_max = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
 
@@ -202,34 +162,18 @@ pub fn cast_ray_block_before(
             t_max.z += t_delta.z;
         }
 
-        let p_chunk_x = ((place_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let p_chunk_y = ((place_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let p_chunk_z = ((place_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
+        let place_chunk_pos: ChunkPos = place_pos.into();
+        let place_chunk_relative: ChunkRelative = place_pos.into();
 
-        let p_crx = wrap_to_chunk_coord(place_pos.x);
-        let p_cry = wrap_to_chunk_coord(place_pos.y);
-        let p_crz = wrap_to_chunk_coord(place_pos.z);
+        let current_chunk_pos: ChunkPos = current_block_pos.into();
+        let current_chunk_relative: ChunkRelative = current_block_pos.into();
 
-        let c_chunk_x = ((current_block_pos.x as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let c_chunk_y = ((current_block_pos.y as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-        let c_chunk_z = ((current_block_pos.z as f32) / (CHUNK_SIZE as f32)).floor() as i32;
-
-        let c_crx = wrap_to_chunk_coord(current_block_pos.x);
-        let c_cry = wrap_to_chunk_coord(current_block_pos.y);
-        let c_crz = wrap_to_chunk_coord(current_block_pos.z);
-
-        if let Some(chunk) = chunks.get(&nalgebra_glm::vec3(c_chunk_x, c_chunk_y, c_chunk_z))
-            && chunk.load().chunk.get_block(c_crx, c_cry, c_crz) != 0
+        if let Some(chunk) = chunks.get(&current_chunk_pos)
+            && chunk.load().chunk.get_block(current_chunk_relative) != 0
         {
-            let chunk_pos = nalgebra_glm::vec3(p_chunk_x, p_chunk_y, p_chunk_z);
-            return Some((chunk_pos, (p_crx, p_cry, p_crz)));
+            return Some((place_chunk_pos, (place_chunk_relative)));
         }
     }
 
     None
-}
-
-fn wrap_to_chunk_coord(world_coord: i32) -> usize {
-    let result = world_coord.rem_euclid(CHUNK_SIZE as i32);
-    result as usize
 }
