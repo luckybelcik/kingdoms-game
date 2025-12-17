@@ -15,6 +15,7 @@ use winit::{
 
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
+use crate::client::rendering::chunk_mesh::StoredChunkMesh;
 use crate::client::rendering::client_chunk::ClientChunk;
 use crate::client::rendering::render_results::RenderResults;
 use crate::client::rendering::renderer::Renderer;
@@ -386,6 +387,27 @@ impl App {
             self.app_info.chunk_count = self.chunks.len() as u64;
             self.app_info.avg_chunk_vram =
                 self.app_info.total_chunk_vram / self.app_info.chunk_count;
+        }
+
+        if let Some(server_packet_receiver) = &self.server_packet_receiver {
+            while let Ok(server_packet) = server_packet_receiver.try_recv() {
+                println!("friggin packet yo");
+                match server_packet {
+                    ServerPacket::Ping => {
+                        // nothing bruh
+                    }
+                    ServerPacket::Chunk(chunk) => {
+                        let mesh = StoredChunkMesh::new_empty();
+                        let pos = chunk.get_chunk_pos();
+                        let client_chunk = ArcSwap::new(Arc::new(ClientChunk::new(
+                            Arc::try_unwrap(chunk).unwrap(),
+                            mesh,
+                        )));
+                        self.chunks.insert(pos, client_chunk);
+                        self.dirty_chunks.insert(pos);
+                    }
+                }
+            }
         }
     }
 

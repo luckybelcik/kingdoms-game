@@ -5,7 +5,7 @@ use crate::shared::{
     coordinate_systems::{chunk_pos::ChunkPos, chunk_relative::ChunkRelative},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Chunk {
     chunk_pos: ChunkPos,
     blocks: [u16; CHUNK_VOLUME],
@@ -18,7 +18,7 @@ impl Chunk {
         self.chunk_pos
     }
 
-    pub fn new(chunk_pos: ChunkPos) -> Self {
+    fn new(chunk_pos: ChunkPos) -> Self {
         Self {
             chunk_pos,
             blocks: [0; CHUNK_VOLUME],
@@ -27,13 +27,24 @@ impl Chunk {
         }
     }
 
-    pub fn new_full(chunk_pos: ChunkPos) -> Self {
-        Self {
-            chunk_pos,
-            blocks: [1; CHUNK_VOLUME],
-            chunk_mask: [(!0); CHUNK_SIZE * CHUNK_SIZE],
-            xz_swap_chunk_mask: [(!0); CHUNK_SIZE * CHUNK_SIZE],
+    pub fn generate(chunk_pos: ChunkPos, dirty_chunks: &mut HashSet<ChunkPos>) -> Self {
+        let mut chunk = Self::new(chunk_pos);
+
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    let relative_pos = ChunkRelative::new(x as u8, y as u8, z as u8);
+                    let block_pos = chunk_pos.to_block_pos(relative_pos);
+
+                    if block_pos.y > 0 {
+                        let block = 1;
+                        chunk.set_block(relative_pos, block, dirty_chunks);
+                    }
+                }
+            }
         }
+
+        chunk
     }
 
     pub fn set_block(
