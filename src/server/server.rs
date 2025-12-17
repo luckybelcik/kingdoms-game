@@ -87,12 +87,7 @@ impl Server {
                     .collect();
 
                 for chunk_pos in to_load {
-                    Self::load_chunk(
-                        &mut self.chunks,
-                        &mut self.dirty_chunks,
-                        player_data,
-                        chunk_pos,
-                    );
+                    Self::load_chunk(&mut self.chunks, player_data, chunk_pos);
                 }
                 for chunk_pos in to_unload {
                     Self::unload_chunk(&mut self.chunks, &mut self.dirty_chunks, chunk_pos);
@@ -104,7 +99,6 @@ impl Server {
 
     fn load_chunk(
         chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
-        dirty_chunks: &mut HashSet<ChunkPos>,
         player_data: &PlayerData,
         chunk_pos: ChunkPos,
     ) {
@@ -114,7 +108,7 @@ impl Server {
             return;
         }
 
-        let chunk = Arc::new(Chunk::generate(chunk_pos, dirty_chunks));
+        let chunk = Arc::new(Chunk::generate(chunk_pos));
         Self::send_packet(player_data, ServerPacket::Chunk(Arc::new((*chunk).clone())));
         chunks.insert(chunk_pos, ArcSwap::new(chunk));
     }

@@ -27,24 +27,43 @@ impl Chunk {
         }
     }
 
-    pub fn generate(chunk_pos: ChunkPos, dirty_chunks: &mut HashSet<ChunkPos>) -> Self {
+    // we avoid using the fancy coordinate types here cause its a hot loop
+    // TRUST MI BRO this is 100x faster
+    pub fn generate(chunk_pos: ChunkPos) -> Self {
         let mut chunk = Self::new(chunk_pos);
 
-        for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    let relative_pos = ChunkRelative::new(x as u8, y as u8, z as u8);
-                    let block_pos = chunk_pos.to_block_pos(relative_pos);
+        let c_y = chunk_pos.y;
 
-                    if block_pos.y > 0 {
+        for x in 0..CHUNK_SIZE as u8 {
+            for y in 0..CHUNK_SIZE as u8 {
+                for z in 0..CHUNK_SIZE as u8 {
+                    let b_y = y as i32 + c_y;
+
+                    if b_y < 0 {
                         let block = 1;
-                        chunk.set_block(relative_pos, block, dirty_chunks);
+                        chunk.set_block_unsafe(x, y, z, block);
                     }
                 }
             }
         }
 
         chunk
+    }
+
+    // unsafe version without the fancy types
+    fn set_block_unsafe(&mut self, x: u8, y: u8, z: u8, block: u16) {
+        if x < CHUNK_SIZE as u8 || y < CHUNK_SIZE as u8 || z < CHUNK_SIZE as u8 {
+            self.blocks
+                [x as usize + y as usize * CHUNK_SIZE + z as usize * CHUNK_SIZE * CHUNK_SIZE] =
+                block;
+            if block == 0 {
+                self.chunk_mask[y as usize + z as usize * CHUNK_SIZE] &= !(1 << x);
+                self.xz_swap_chunk_mask[y as usize + x as usize * CHUNK_SIZE] &= !(1 << z);
+            } else {
+                self.chunk_mask[y as usize + z as usize * CHUNK_SIZE] |= 1 << x;
+                self.xz_swap_chunk_mask[y as usize + x as usize * CHUNK_SIZE] |= 1 << z;
+            }
+        }
     }
 
     pub fn set_block(
