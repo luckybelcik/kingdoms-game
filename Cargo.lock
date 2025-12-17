@@ -145,6 +145,7 @@ dependencies = [
  "log",
  "nalgebra-glm",
  "pollster",
+ "rand",
  "rayon",
  "web-time",
  "wgpu",

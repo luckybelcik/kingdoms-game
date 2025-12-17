@@ -3,6 +3,7 @@ use egui::{Align2, Color32};
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender};
 use web_time::Instant;
 use winit::{
     application::ApplicationHandler,
@@ -21,10 +22,9 @@ use crate::client::rendering::ui_state::{
     PopupWindow, RenderConfigData, UIState, WorldSizePopupData,
 };
 use crate::client::rendering::util::{cast_ray_block_before, cast_ray_block_hit};
-
-const CHUNKS_WIDTH: i32 = 16;
-const CHUNKS_LENGTH: i32 = 16;
-const CHUNKS_HEIGHT: i32 = 1;
+use crate::shared::communication::client_packet::ClientPacket;
+use crate::shared::communication::player_id::PlayerId;
+use crate::shared::communication::server_packet::ServerPacket;
 
 #[derive(Default)]
 pub struct App {
@@ -38,6 +38,33 @@ pub struct App {
     pub app_render_config: AppRenderConfig,
     render_results: RenderResults,
     ui_state: UIState,
+    player_id: Option<PlayerId>,
+    server_packet_receiver: Option<Receiver<ServerPacket>>,
+    client_packet_sender: Option<Sender<ClientPacket>>,
+}
+
+impl App {
+    pub fn new(
+        player_id: PlayerId,
+        server_packet_receiver: Receiver<ServerPacket>,
+        client_packet_sender: Sender<ClientPacket>,
+    ) -> Self {
+        Self {
+            window: None,
+            renderer: None,
+            gui_state: None,
+            pressed_keys: Default::default(),
+            chunks: Default::default(),
+            dirty_chunks: Default::default(),
+            app_info: Default::default(),
+            app_render_config: Default::default(),
+            render_results: Default::default(),
+            ui_state: Default::default(),
+            player_id: Some(player_id),
+            server_packet_receiver: Some(server_packet_receiver),
+            client_packet_sender: Some(client_packet_sender),
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -93,19 +120,7 @@ impl ApplicationHandler for App {
         self.gui_state = Some(gui_state);
         app_info.last_render_time = Some(Instant::now());
 
-        let mut chunks = HashMap::<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>::new();
-        for i in 0..CHUNKS_WIDTH {
-            for j in 0..CHUNKS_LENGTH {
-                for k in 0..CHUNKS_HEIGHT {
-                    let pos = nalgebra_glm::vec3(i, k, j);
-                    let chunk = ClientChunk::new_full(pos);
-                    chunks.insert(pos, ArcSwap::new(Arc::new(chunk)));
-                    self.dirty_chunks.insert(pos);
-                }
-            }
-        }
-
-        self.chunks = chunks;
+        self.chunks = HashMap::<nalgebra_glm::IVec3, ArcSwap<ClientChunk>>::new();
 
         app_info.camera_pos = nalgebra_glm::vec3(-10.0, 5.0, -10.0);
         app_info.camera_rot = nalgebra_glm::vec3(0.0, 0.0, 0.0);
