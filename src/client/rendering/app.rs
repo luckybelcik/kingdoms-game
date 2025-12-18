@@ -391,7 +391,6 @@ impl App {
 
         if let Some(server_packet_receiver) = &self.server_packet_receiver {
             while let Ok(server_packet) = server_packet_receiver.try_recv() {
-                println!("friggin packet yo");
                 match server_packet {
                     ServerPacket::Ping => {
                         // nothing bruh
@@ -405,6 +404,12 @@ impl App {
                         )));
                         self.chunks.insert(pos, client_chunk);
                         self.dirty_chunks.insert(pos);
+                        self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
+                        self.dirty_chunks.insert(pos.offset_copy(-1, 0, 0));
+                        self.dirty_chunks.insert(pos.offset_copy(0, 1, 0));
+                        self.dirty_chunks.insert(pos.offset_copy(0, -1, 0));
+                        self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
+                        self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
                     }
                 }
             }

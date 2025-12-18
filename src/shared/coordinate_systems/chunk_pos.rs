@@ -16,6 +16,16 @@ impl ChunkPos {
         ChunkPos(vec)
     }
 
+    pub fn offset(&mut self, x: i32, y: i32, z: i32) {
+        self.x = self.x + x;
+        self.y = self.y + y;
+        self.z = self.z + z;
+    }
+
+    pub fn offset_copy(&self, x: i32, y: i32, z: i32) -> Self {
+        ChunkPos::new(self.x + x, self.y + y, self.z + z)
+    }
+
     pub fn to_block_pos(&self, chunk_relative: ChunkRelative) -> BlockPos {
         BlockPos::new(
             self.x * CHUNK_SIZE as i32 + chunk_relative.x as i32,
@@ -35,5 +45,11 @@ impl std::ops::Deref for ChunkPos {
     type Target = nalgebra_glm::IVec3;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl std::ops::DerefMut for ChunkPos {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }

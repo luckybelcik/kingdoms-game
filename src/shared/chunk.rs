@@ -37,7 +37,7 @@ impl Chunk {
         for x in 0..CHUNK_SIZE as u8 {
             for y in 0..CHUNK_SIZE as u8 {
                 for z in 0..CHUNK_SIZE as u8 {
-                    let b_y = y as i32 + c_y;
+                    let b_y = y as i32 + c_y * CHUNK_SIZE as i32;
 
                     if b_y < 0 {
                         let block = 1;
@@ -84,6 +84,25 @@ impl Chunk {
             }
 
             dirty_chunks.insert(self.chunk_pos);
+
+            if pos.x == CHUNK_SIZE as u8 - 1 {
+                dirty_chunks.insert(self.chunk_pos.offset_copy(1, 0, 0));
+            }
+            if pos.x == 0 {
+                dirty_chunks.insert(self.chunk_pos.offset_copy(-1, 0, 0));
+            }
+            if pos.y == CHUNK_SIZE as u8 - 1 {
+                dirty_chunks.insert(self.chunk_pos.offset_copy(0, 1, 0));
+            }
+            if pos.y == 0 {
+                dirty_chunks.insert(self.chunk_pos.offset_copy(0, -1, 0));
+            }
+            if pos.z == CHUNK_SIZE as u8 - 1 {
+                dirty_chunks.insert(self.chunk_pos.offset_copy(0, 0, 1));
+            }
+            if pos.z == 0 {
+                dirty_chunks.insert(self.chunk_pos.offset_copy(0, 0, -1));
+            }
         }
     }
 
