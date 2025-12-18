@@ -22,12 +22,12 @@ use crate::client::rendering::renderer::Renderer;
 use crate::client::rendering::ui_state::{
     PopupWindow, RenderConfigData, UIState, WorldSizePopupData,
 };
-use crate::client::rendering::util::{cast_ray_block_before, cast_ray_block_hit};
 use crate::shared::communication::client_packet::ClientPacket;
 use crate::shared::communication::player_id::PlayerId;
 use crate::shared::communication::server_packet::ServerPacket;
 use crate::shared::coordinate_systems::chunk_pos::ChunkPos;
 use crate::shared::coordinate_systems::entity_pos::EntityPos;
+use crate::shared::util::raycast::{RaycastResult, cast_ray};
 
 #[derive(Default)]
 pub struct App {
@@ -228,44 +228,46 @@ impl App {
         }
         if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key
             && event.state == ElementState::Pressed
-            && let Some((chunk_pos, chunk_relative)) = cast_ray_block_hit(
+            && let Some(raycast_result) = cast_ray(
                 self.app_info.camera_pos,
                 self.app_info.camera_rot,
                 &self.chunks,
+                64,
             )
-            && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
+            && let Some(chunk) = self.chunks.get_mut(&raycast_result.hit.0)
         {
             log::info!(
                 "Break block at {} {} {}",
-                chunk_relative.x,
-                chunk_relative.y,
-                chunk_relative.z
+                raycast_result.hit.1.x,
+                raycast_result.hit.1.y,
+                raycast_result.hit.1.z
             );
             let mut new_client_chunk = (*(chunk.load_full())).clone();
             new_client_chunk
                 .chunk
-                .set_block(chunk_relative, 0, &mut self.dirty_chunks);
+                .set_block(raycast_result.hit.1, 0, &mut self.dirty_chunks);
             chunk.store(Arc::new(new_client_chunk));
         }
         if let PhysicalKey::Code(KeyCode::Period) = event.physical_key
             && event.state == ElementState::Pressed
-            && let Some((chunk_pos, chunk_relative)) = cast_ray_block_before(
+            && let Some(raycast_result) = cast_ray(
                 self.app_info.camera_pos,
                 self.app_info.camera_rot,
                 &self.chunks,
+                64,
             )
-            && let Some(chunk) = self.chunks.get_mut(&chunk_pos)
+            && let Some(chunk) = self.chunks.get_mut(&raycast_result.previous.0)
         {
             log::info!(
                 "Place block at {} {} {}",
-                chunk_relative.x,
-                chunk_relative.y,
-                chunk_relative.z
+                raycast_result.previous.1.x,
+                raycast_result.previous.1.y,
+                raycast_result.previous.1.z
             );
             let mut new_client_chunk = (*(chunk.load_full())).clone();
             new_client_chunk
                 .chunk
-                .set_block(chunk_relative, 1, &mut self.dirty_chunks);
+                .set_block(raycast_result.previous.1, 1, &mut self.dirty_chunks);
             chunk.store(Arc::new(new_client_chunk));
         }
         if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key

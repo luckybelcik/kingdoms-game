@@ -1,8 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use arc_swap::ArcSwap;
 
 use crate::shared::{
     constants::{CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow},
     coordinate_systems::{chunk_pos::ChunkPos, chunk_relative::ChunkRelative},
+    traits::world_inspector::WorldInspector,
 };
 
 #[derive(Clone, Debug)]
@@ -116,5 +119,13 @@ impl Chunk {
 
     pub fn get_chunk_mask(&self) -> &[ChunkBitRow] {
         &self.chunk_mask
+    }
+}
+
+impl WorldInspector for HashMap<ChunkPos, ArcSwap<Chunk>> {
+    fn get_block_id(&self, chunk_pos: ChunkPos, rel_pos: ChunkRelative) -> u16 {
+        self.get(&chunk_pos)
+            .map(|c| c.load().get_block(rel_pos))
+            .unwrap_or(0)
     }
 }
