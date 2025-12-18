@@ -27,7 +27,7 @@ use crate::shared::communication::player_id::PlayerId;
 use crate::shared::communication::server_packet::ServerPacket;
 use crate::shared::coordinate_systems::chunk_pos::ChunkPos;
 use crate::shared::coordinate_systems::entity_pos::EntityPos;
-use crate::shared::util::raycast::{RaycastResult, cast_ray};
+use crate::shared::util::raycast::cast_ray;
 
 #[derive(Default)]
 pub struct App {
@@ -412,6 +412,9 @@ impl App {
                         self.dirty_chunks.insert(pos.offset_copy(0, -1, 0));
                         self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
                         self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
+                    }
+                    ServerPacket::Debug(data) => {
+                        println!("Debug data: {:?}", data);
                     }
                 }
             }

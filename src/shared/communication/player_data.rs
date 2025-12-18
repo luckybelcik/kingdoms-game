@@ -8,6 +8,7 @@ use crate::shared::{
     coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
 };
 
+#[derive(Debug)]
 pub struct PlayerData {
     pub name: String,
     pub position: EntityPos,
@@ -17,6 +18,7 @@ pub struct PlayerData {
     pub render_distance: u8,
 }
 
+#[derive(Debug)]
 pub enum ConnectionType {
     Local(Sender<ServerPacket>, Receiver<ClientPacket>),
     Remote,
