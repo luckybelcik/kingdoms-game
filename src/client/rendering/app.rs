@@ -3,7 +3,6 @@ use egui::{Align2, Color32};
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender};
 use web_time::Instant;
 use winit::{
     application::ApplicationHandler,
@@ -13,6 +12,7 @@ use winit::{
     window::{Theme, Window},
 };
 
+use crate::client::connection_details::ClientConnectionType;
 use crate::client::rendering::appinfo::AppInfo;
 use crate::client::rendering::apprenderconfig::AppRenderConfig;
 use crate::client::rendering::chunk_mesh::StoredChunkMesh;
@@ -22,7 +22,8 @@ use crate::client::rendering::renderer::Renderer;
 use crate::client::rendering::ui_state::{
     PopupWindow, RenderConfigData, UIState, WorldSizePopupData,
 };
-use crate::shared::communication::client_packet::ClientPacket;
+use crate::shared::communication::client_packet::{ClientAction, ClientPacket};
+use crate::shared::communication::player_data::ConnectionType;
 use crate::shared::communication::player_id::PlayerId;
 use crate::shared::communication::server_packet::ServerPacket;
 use crate::shared::coordinate_systems::chunk_pos::ChunkPos;
@@ -42,16 +43,11 @@ pub struct App {
     render_results: RenderResults,
     ui_state: UIState,
     player_id: Option<PlayerId>,
-    server_packet_receiver: Option<Receiver<ServerPacket>>,
-    client_packet_sender: Option<Sender<ClientPacket>>,
+    connection_type: Option<ClientConnectionType>,
 }
 
 impl App {
-    pub fn new(
-        player_id: PlayerId,
-        server_packet_receiver: Receiver<ServerPacket>,
-        client_packet_sender: Sender<ClientPacket>,
-    ) -> Self {
+    pub fn new(player_id: PlayerId, connection_type: ClientConnectionType) -> Self {
         Self {
             window: None,
             renderer: None,
@@ -64,8 +60,7 @@ impl App {
             render_results: Default::default(),
             ui_state: Default::default(),
             player_id: Some(player_id),
-            server_packet_receiver: Some(server_packet_receiver),
-            client_packet_sender: Some(client_packet_sender),
+            connection_type: Some(connection_type),
         }
     }
 }
@@ -286,6 +281,17 @@ impl App {
         {
             self.ui_state.show_ui = !self.ui_state.show_ui;
         }
+        if let PhysicalKey::Code(KeyCode::KeyI) = event.physical_key
+            && event.state == ElementState::Pressed
+        {
+            Self::send_packet(
+                self,
+                ClientPacket {
+                    player_id: self.player_id.clone().unwrap(),
+                    action: ClientAction::Debug,
+                },
+            );
+        }
     }
 
     fn handle_resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -391,31 +397,63 @@ impl App {
                 self.app_info.total_chunk_vram / self.app_info.chunk_count;
         }
 
-        if let Some(server_packet_receiver) = &self.server_packet_receiver {
-            while let Ok(server_packet) = server_packet_receiver.try_recv() {
-                match server_packet {
-                    ServerPacket::Ping => {
-                        // nothing bruh
+        let mut packets = Vec::new();
+
+        if let Some(connection_type) = &self.connection_type {
+            match connection_type {
+                ClientConnectionType::Local(details) => {
+                    while let Ok(server_packet) = details.server_packet_receiver.try_recv() {
+                        packets.push(server_packet);
                     }
-                    ServerPacket::Chunk(chunk) => {
-                        let mesh = StoredChunkMesh::new_empty();
-                        let pos = chunk.get_chunk_pos();
-                        let client_chunk = ArcSwap::new(Arc::new(ClientChunk::new(
-                            Arc::try_unwrap(chunk).unwrap(),
-                            mesh,
-                        )));
-                        self.chunks.insert(pos, client_chunk);
-                        self.dirty_chunks.insert(pos);
-                        self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
-                        self.dirty_chunks.insert(pos.offset_copy(-1, 0, 0));
-                        self.dirty_chunks.insert(pos.offset_copy(0, 1, 0));
-                        self.dirty_chunks.insert(pos.offset_copy(0, -1, 0));
-                        self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
-                        self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
-                    }
-                    ServerPacket::Debug(data) => {
-                        println!("Debug data: {:?}", data);
-                    }
+                }
+                ClientConnectionType::Remote(_) => {
+                    unimplemented!("Remote connection logic not implemented");
+                }
+            }
+        }
+
+        for packet in packets {
+            Self::receive_packet(self, packet);
+        }
+    }
+
+    fn receive_packet(&mut self, server_packet: ServerPacket) {
+        match server_packet {
+            ServerPacket::Ping => {
+                // nothing bruh
+            }
+            ServerPacket::Chunk(chunk) => {
+                let mesh = StoredChunkMesh::new_empty();
+                let pos = chunk.get_chunk_pos();
+                let client_chunk = ArcSwap::new(Arc::new(ClientChunk::new(
+                    Arc::try_unwrap(chunk).unwrap(),
+                    mesh,
+                )));
+                self.chunks.insert(pos, client_chunk);
+                self.dirty_chunks.insert(pos);
+                self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
+                self.dirty_chunks.insert(pos.offset_copy(-1, 0, 0));
+                self.dirty_chunks.insert(pos.offset_copy(0, 1, 0));
+                self.dirty_chunks.insert(pos.offset_copy(0, -1, 0));
+                self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
+                self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
+            }
+            ServerPacket::Debug(data) => {
+                println!("Debug data: {:?}", data);
+            }
+        }
+    }
+
+    fn send_packet(&mut self, client_packet: ClientPacket) {
+        if let Some(connection_type) = self.connection_type.as_ref() {
+            match connection_type {
+                ClientConnectionType::Local(details) => {
+                    details.client_packet_sender.send(client_packet).unwrap();
+                }
+                ClientConnectionType::Remote(_) => {
+                    unimplemented!(
+                        "Remote connection packet sending from clietn not implmentednd no no no!"
+                    )
                 }
             }
         }

@@ -6,7 +6,10 @@ use std::time::{Duration, Instant};
 use winit::platform::x11::EventLoopBuilderExtX11;
 
 use crate::{
-    client::rendering::app::App,
+    client::{
+        connection_details::{ClientConnectionType, LocalConnectionDetails},
+        rendering::app::App,
+    },
     server::server::Server,
     shared::communication::{
         client_packet::ClientPacket, player_data::ConnectionType, player_id::PlayerId,
@@ -82,7 +85,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Server set up successfully! Jump jump jump!");
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-        let mut app = App::new(player_id, server_receiver, client_sender);
+        let local_connection_details = LocalConnectionDetails {
+            server_packet_receiver: server_receiver,
+            client_packet_sender: client_sender,
+        };
+        let connection_type = ClientConnectionType::Local(local_connection_details);
+        let mut app = App::new(player_id, connection_type);
         println!("App created successfully!");
         event_loop.run_app(&mut app)?;
         Ok(())

@@ -63,6 +63,14 @@ impl Server {
                     player_data.last_ping = Instant::now();
                 }
             }
+            ClientAction::Debug => {
+                if let Some(player_data) = self.players.get_mut(&player_id) {
+                    Self::send_packet(
+                        &player_data,
+                        ServerPacket::Debug(Box::new(player_data.to_sendable())),
+                    );
+                }
+            }
         }
     }
 

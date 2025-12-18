@@ -7,4 +7,5 @@ pub struct ClientPacket {
 
 pub enum ClientAction {
     Ping,
+    Debug,
 }
