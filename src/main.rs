@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 server.add_local_player(player_id_clone, server_sender, client_receiver);
 
-                const TICK_RATE: u32 = 60;
+                const TICK_RATE: u32 = 20;
                 let tick_duration: Duration = Duration::from_secs_f64(1.0 / TICK_RATE as f64);
 
                 loop {
@@ -70,6 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     server.load_chunks();
+                    server.send_chunk_packets();
 
                     let elapsed = frame_start.elapsed();
 

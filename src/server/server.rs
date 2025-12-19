@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{
         Arc,
         mpsc::{Receiver, Sender},
@@ -25,6 +25,7 @@ pub struct Server {
     pub chunks: HashMap<ChunkPos, ArcSwap<Chunk>>,
     pub dirty_chunks: HashSet<ChunkPos>,
     pub players: HashMap<PlayerId, PlayerData>,
+    pub new_chunk_queues: HashMap<PlayerId, VecDeque<ServerPacket>>,
     pub tick: u128,
 }
 
@@ -34,6 +35,7 @@ impl Server {
             chunks: HashMap::new(),
             dirty_chunks: HashSet::new(),
             players: HashMap::new(),
+            new_chunk_queues: HashMap::new(),
             tick: 0,
         }
     }
@@ -50,9 +52,10 @@ impl Server {
             chunk_tick_position: ChunkPos::new(0, 500, 0),
             connection_type: ConnectionType::Local(server_sender, client_receiver),
             last_ping: Instant::now(),
-            render_distance: 3,
+            render_distance: 6,
         };
-        self.players.insert(player_id, player_data);
+        self.players.insert(player_id.clone(), player_data);
+        self.new_chunk_queues.insert(player_id, VecDeque::new());
     }
 
     pub fn handle_client_packet(&mut self, client_packet: ClientPacket) {
@@ -75,7 +78,7 @@ impl Server {
     }
 
     pub fn load_chunks(&mut self) {
-        for player_data in self.players.values_mut() {
+        for (player_id, player_data) in self.players.iter_mut() {
             let player_chunk_pos = player_data.position.to_block_pos().to_chunk_pos();
             if player_chunk_pos != player_data.chunk_tick_position {
                 let current_nearby_chunks =
@@ -95,7 +98,12 @@ impl Server {
                     .collect();
 
                 for chunk_pos in to_load {
-                    Self::load_chunk(&mut self.chunks, player_data, chunk_pos);
+                    Self::load_chunk(
+                        &mut self.chunks,
+                        &mut self.new_chunk_queues,
+                        player_id,
+                        chunk_pos,
+                    );
                 }
                 for chunk_pos in to_unload {
                     Self::unload_chunk(&mut self.chunks, &mut self.dirty_chunks, chunk_pos);
@@ -107,17 +115,22 @@ impl Server {
 
     fn load_chunk(
         chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
-        player_data: &PlayerData,
+        new_chunk_queues: &mut HashMap<PlayerId, VecDeque<ServerPacket>>,
+        player_id: &PlayerId,
         chunk_pos: ChunkPos,
     ) {
         if let Some(chunk) = chunks.get(&chunk_pos) {
             let chunk_arc = chunk.load_full();
-            Self::send_packet(player_data, ServerPacket::Chunk(chunk_arc.clone()));
+            if let Some(queue) = new_chunk_queues.get_mut(player_id) {
+                queue.push_back(ServerPacket::Chunk(chunk_arc.clone()));
+            }
             return;
         }
 
         let chunk = Arc::new(Chunk::generate(chunk_pos));
-        Self::send_packet(player_data, ServerPacket::Chunk(Arc::new((*chunk).clone())));
+        if let Some(queue) = new_chunk_queues.get_mut(player_id) {
+            queue.push_back(ServerPacket::Chunk(Arc::new((*chunk).clone())));
+        };
         chunks.insert(chunk_pos, ArcSwap::new(chunk));
     }
 
@@ -132,6 +145,18 @@ impl Server {
 
         if dirty_chunks.contains(&chunk_pos) {
             dirty_chunks.remove(&chunk_pos);
+        }
+    }
+
+    pub fn send_chunk_packets(&mut self) {
+        for (player_id, queue) in self.new_chunk_queues.iter_mut() {
+            if let Some(player_data) = self.players.get(player_id) {
+                let first_packets = queue.drain(0..std::cmp::min(5, queue.len()));
+
+                for packet in first_packets {
+                    Self::send_packet(player_data, packet);
+                }
+            }
         }
     }
 
