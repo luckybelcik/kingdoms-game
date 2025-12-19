@@ -21,7 +21,7 @@ pub struct RenderConfig {
 }
 
 impl RenderConfig {
-    pub fn get_raw() -> Self {
+    pub fn get_full() -> Self {
         let raw = RENDER_CONFIG_ATOMIC
             .data
             .load(std::sync::atomic::Ordering::SeqCst);
@@ -43,7 +43,7 @@ impl RenderConfig {
     }
 
     #[inline]
-    fn set(mask: u64, value: bool) {
+    pub fn set(mask: u64, value: bool) {
         RENDER_CONFIG_ATOMIC
             .data
             .fetch_update(
@@ -63,7 +63,7 @@ impl RenderConfig {
     }
 
     #[inline]
-    fn get(mask: u64) -> bool {
+    pub fn get(mask: u64) -> bool {
         let data = RENDER_CONFIG_ATOMIC
             .data
             .load(std::sync::atomic::Ordering::SeqCst);
@@ -71,7 +71,7 @@ impl RenderConfig {
     }
 
     #[inline]
-    fn toggle(mask: u64) {
+    pub fn toggle(mask: u64) {
         RENDER_CONFIG_ATOMIC
             .data
             .fetch_xor(mask, std::sync::atomic::Ordering::SeqCst);

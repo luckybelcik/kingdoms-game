@@ -64,22 +64,18 @@ impl Mesher {
 
                 let loaded_chunk = chunk.load_full();
 
-                self.job_sender
-                    .send((loaded_chunk, nearby_chunks, render_config.clone()))
-                    .unwrap();
+                self.job_sender.send((loaded_chunk, nearby_chunks)).unwrap();
             }
         }
 
         dirty_keys.clear();
     }
 
-    pub fn receive_from_remeshing(
-        &self,
-        chunks: &mut HashMap<ChunkPos, ArcSwap<ClientChunk>>,
-    ) -> Vec<SendableChunkMesh> {
+    pub fn receive_from_remeshing(&self) -> Vec<SendableChunkMesh> {
         let mut new_meshes = Vec::new();
+
         for sent_mesh in self.mesh_receiver.try_iter() {
-            new_meshes.append(sent_mesh);
+            new_meshes.push(sent_mesh);
         }
 
         new_meshes

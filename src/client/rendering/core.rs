@@ -1,16 +1,12 @@
-use std::collections::HashMap;
-
+#[cfg(debug_assertions)]
+use crate::client::client::config::render_config::{RenderConfig, RenderFlags};
 use crate::{
-    client::rendering::{
-        apprenderconfig::AppRenderConfig, client_chunk::ClientChunk, render_results::RenderResults,
-        renderer::Renderer,
+    client::{
+        client::client::Client,
+        rendering::{render_results::RenderResults, renderer::Renderer},
     },
-    shared::{
-        coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
-        render::{push_constants::PushConstants, vertex::Vertex},
-    },
+    shared::render::{push_constants::PushConstants, vertex::Vertex},
 };
-use arc_swap::ArcSwap;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 const QUAD_INDICES: &[u32] = &[0, 2, 1, 2, 3, 1];
@@ -65,14 +61,11 @@ impl Scene {
     pub fn render<'rpass>(
         &'rpass self,
         renderpass: &mut wgpu::RenderPass<'rpass>,
-        chunks: &mut HashMap<ChunkPos, ArcSwap<ClientChunk>>,
-        camera_rot: nalgebra_glm::Vec3,
-        camera_pos: EntityPos,
+        client: &mut Option<Client>,
         aspect_ratio: f32,
-        render_config: &AppRenderConfig,
     ) -> RenderResults {
         #[cfg(debug_assertions)]
-        if render_config.get_use_line_rendering_bit() {
+        if RenderConfig::get(RenderFlags::LINE_RENDERING) {
             renderpass.set_pipeline(&self.line_pipeline);
         } else {
             renderpass.set_pipeline(&self.pipeline);
@@ -82,52 +75,64 @@ impl Scene {
         renderpass.set_pipeline(&self.pipeline);
 
         renderpass.set_bind_group(0, &self.chunk_ssbo_bind_group, &[]);
-        PushConstants::update_render_config(renderpass, render_config);
+        PushConstants::update_render_config(renderpass);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
 
-        PushConstants::update_vp_matrix(renderpass, camera_pos, camera_rot, aspect_ratio);
-
         let mut results = RenderResults::default();
 
-        for chunk in chunks.values() {
-            let loaded_client_chunk = chunk.load();
-            let mut draw_calls = loaded_client_chunk.mesh.get_draw_calls();
-            let culled_calls = loaded_client_chunk
-                .mesh
-                .get_visible_draw_calls(camera_pos, loaded_client_chunk.chunk.get_chunk_pos());
+        if let Some(client) = client {
+            PushConstants::update_vp_matrix(
+                renderpass,
+                client.camera_pos,
+                client.camera_rot,
+                aspect_ratio,
+            );
 
-            if culled_calls.is_empty() {
-                continue;
-            }
-
-            PushConstants::update_chunk_pos(renderpass, loaded_client_chunk.chunk.get_chunk_pos());
-
-            if render_config.get_cull_chunk_faces_bit() {
-                draw_calls = &culled_calls;
-            }
-
-            for draw_call in draw_calls {
-                let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
-                let end = start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
-
-                PushConstants::update_per_draw_data(
-                    renderpass,
-                    draw_call.buffer_offset,
-                    draw_call.instance_count,
+            for chunk in client.chunks.values() {
+                let loaded_client_chunk = chunk.load();
+                let mut draw_calls = loaded_client_chunk.mesh.get_draw_calls();
+                let culled_calls = loaded_client_chunk.mesh.get_visible_draw_calls(
+                    client.camera_pos,
+                    loaded_client_chunk.chunk.get_chunk_pos(),
                 );
 
-                if start >= end {
-                    // next iteration if nothing to draw
+                if culled_calls.is_empty() {
                     continue;
                 }
 
-                renderpass.draw_indexed(0..6, 0, 0..draw_call.instance_count as u32);
+                PushConstants::update_chunk_pos(
+                    renderpass,
+                    loaded_client_chunk.chunk.get_chunk_pos(),
+                );
 
-                results.triangles_rendered += draw_call.instance_count as u32 * 2;
-                results.draw_calls += 1;
+                if RenderConfig::get(RenderFlags::CULL_FACES) {
+                    draw_calls = &culled_calls;
+                }
+
+                for draw_call in draw_calls {
+                    let start = draw_call.buffer_offset * std::mem::size_of::<Vertex>() as u64;
+                    let end =
+                        start + draw_call.instance_count * std::mem::size_of::<Vertex>() as u64;
+
+                    PushConstants::update_per_draw_data(
+                        renderpass,
+                        draw_call.buffer_offset,
+                        draw_call.instance_count,
+                    );
+
+                    if start >= end {
+                        // next iteration if nothing to draw
+                        continue;
+                    }
+
+                    renderpass.draw_indexed(0..6, 0, 0..draw_call.instance_count as u32);
+
+                    results.triangles_rendered += draw_call.instance_count as u32 * 2;
+                    results.draw_calls += 1;
+                }
+                results.chunk_count += 1;
             }
-            results.chunk_count += 1;
         }
 
         results

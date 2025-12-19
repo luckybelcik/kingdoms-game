@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use arc_swap::ArcSwap;
 
 use crate::{
-    client::rendering::chunk_mesh::StoredChunkMesh,
+    client::client::chunk_mesh::StoredChunkMesh,
     shared::{
         chunk::Chunk,
         coordinate_systems::{chunk_pos::ChunkPos, chunk_relative::ChunkRelative},

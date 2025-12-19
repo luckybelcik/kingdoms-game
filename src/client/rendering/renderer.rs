@@ -1,18 +1,8 @@
-use std::collections::{HashMap, HashSet};
-
-use arc_swap::ArcSwap;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
-use crate::{
-    client::rendering::{
-        apprenderconfig::AppRenderConfig,
-        chunk_mesh::{MeshJob, SendableChunkMesh},
-        client_chunk::ClientChunk,
-        core::Scene,
-        gpu::Gpu,
-        render_results::RenderResults,
-    },
-    shared::coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
+use crate::client::{
+    client::client::Client,
+    rendering::{core::Scene, gpu::Gpu, render_results::RenderResults},
 };
 
 pub struct Renderer {
@@ -71,13 +61,13 @@ impl Renderer {
         screen_descriptor: egui_wgpu::ScreenDescriptor,
         paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         textures_delta: egui::TexturesDelta,
-        chunks_mut: &mut HashMap<ChunkPos, ArcSwap<ClientChunk>>,
-        dirty_chunks: &mut HashSet<ChunkPos>,
-        camera_pos: EntityPos,
-        camera_rot: nalgebra_glm::Vec3,
-        render_config: &AppRenderConfig,
+        client: &mut Option<Client>,
     ) -> RenderResults {
         self.scene.update(&self.gpu.queue);
+
+        if let Some(client) = client {
+            client.update_meshes(&self.gpu.queue, &mut self.chunk_ssbo);
+        }
 
         for (id, image_delta) in &textures_delta.set {
             self.egui_renderer
@@ -165,14 +155,9 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
-            results = self.scene.render(
-                &mut render_pass,
-                chunks_mut,
-                camera_rot,
-                camera_pos,
-                self.gpu.aspect_ratio(),
-                render_config,
-            );
+            results = self
+                .scene
+                .render(&mut render_pass, client, self.gpu.aspect_ratio());
 
             self.egui_renderer.render(
                 &mut render_pass.forget_lifetime(),

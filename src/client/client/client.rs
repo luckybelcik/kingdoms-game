@@ -1,17 +1,184 @@
-use crate::client::app::app::App;
-use std::collections::HashMap;
+use crate::{
+    client::{
+        app::appinfo::AppInfo,
+        client::{chunk_mesh::StoredChunkMesh, client_chunk::ClientChunk},
+        connection_details::ClientConnectionType,
+    },
+    shared::{
+        communication::{
+            client_packet::ClientPacket, player_id::PlayerId, server_packet::ServerPacket,
+        },
+        coordinate_systems::entity_pos::EntityPos,
+    },
+};
+use std::{
+    collections::{HashMap, HashSet},
+    f32::consts::PI,
+    sync::Arc,
+};
 
 use arc_swap::ArcSwap;
+use nalgebra_glm::{Vec3, vec3};
+use wgpu_buffer_allocator::allocator::SSBOAllocator;
+use winit::keyboard::KeyCode;
 
 use crate::{client::client::mesher::Mesher, shared::coordinate_systems::chunk_pos::ChunkPos};
 
 pub struct Client {
     pub chunks: HashMap<ChunkPos, ArcSwap<ClientChunk>>,
     pub dirty_chunks: HashSet<ChunkPos>,
-    pub mesher: Mesher,
-    pub app: App,
+    mesher: Mesher,
+    pub camera_pos: EntityPos,
+    pub camera_rot: Vec3,
+    player_id: PlayerId,
+    connection_type: ClientConnectionType,
 }
 
 impl Client {
-    pub fn create() -> Client {}
+    pub fn create(player_id: PlayerId, connection_type: ClientConnectionType) -> Self {
+        Client {
+            chunks: HashMap::new(),
+            dirty_chunks: HashSet::new(),
+            mesher: Mesher::create(),
+            camera_pos: EntityPos::new(0.0, 0.0, 0.0),
+            camera_rot: vec3(0.0, 0.0, 0.0),
+            player_id,
+            connection_type,
+        }
+    }
+
+    pub fn get_player_id(&self) -> PlayerId {
+        self.player_id.clone()
+    }
+
+    pub fn handle_client_tick(&mut self, app_info: &mut AppInfo, _delta_seconds: f32) {
+        app_info.chunk_count = self.chunks.len() as u64;
+
+        if app_info.chunk_count > 0 && app_info.total_chunk_vram > 1 {
+            app_info.chunk_count = self.chunks.len() as u64;
+            app_info.avg_chunk_vram = app_info.total_chunk_vram / app_info.chunk_count;
+        }
+
+        let mut packets = Vec::new();
+
+        match &self.connection_type {
+            ClientConnectionType::Local(details) => {
+                while let Ok(server_packet) = details.server_packet_receiver.try_recv() {
+                    packets.push(server_packet);
+                }
+            }
+            ClientConnectionType::Remote(_) => {
+                unimplemented!("Remote connection logic not implemented");
+            }
+        }
+
+        for packet in packets {
+            Self::receive_packet(self, packet);
+        }
+
+        self.mesher
+            .upload_for_remeshing(&mut self.dirty_chunks, &mut self.chunks);
+    }
+
+    pub fn update_meshes(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator) {
+        let meshes = self.mesher.receive_from_remeshing();
+
+        for mesh in meshes {
+            if let Some(chunk) = self.chunks.get(&mesh.pos) {
+                let mut new_client_chunk = (*(chunk.load_full())).clone();
+                new_client_chunk.mesh.update_mesh(queue, allocator, &mesh);
+                chunk.store(Arc::new(new_client_chunk));
+            }
+        }
+    }
+
+    pub fn receive_packet(&mut self, server_packet: ServerPacket) {
+        match server_packet {
+            ServerPacket::Ping => {
+                // nothing bruh
+            }
+            ServerPacket::Chunk(chunk) => {
+                let mesh = StoredChunkMesh::new_empty();
+                let pos = chunk.get_chunk_pos();
+                let client_chunk = ArcSwap::new(Arc::new(ClientChunk::new(
+                    Arc::try_unwrap(chunk).unwrap(),
+                    mesh,
+                )));
+                self.chunks.insert(pos, client_chunk);
+                self.dirty_chunks.insert(pos);
+                self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
+                self.dirty_chunks.insert(pos.offset_copy(-1, 0, 0));
+                self.dirty_chunks.insert(pos.offset_copy(0, 1, 0));
+                self.dirty_chunks.insert(pos.offset_copy(0, -1, 0));
+                self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
+                self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
+            }
+            ServerPacket::Debug(data) => {
+                println!("Debug data: {:?}", data);
+            }
+        }
+    }
+
+    pub fn send_packet(&mut self, client_packet: ClientPacket) {
+        match &self.connection_type {
+            ClientConnectionType::Local(details) => {
+                details.client_packet_sender.send(client_packet).unwrap();
+            }
+            ClientConnectionType::Remote(_) => {
+                unimplemented!(
+                    "Remote connection packet sending from clietn not implmentednd no no no!"
+                )
+            }
+        }
+    }
+
+    pub fn update_camera(
+        &mut self,
+        delta_seconds: f32,
+        pressed_keys: &mut egui::ahash::HashSet<KeyCode>,
+    ) {
+        let move_speed = 20.0 * delta_seconds;
+        let rotation_speed = 2.0 * delta_seconds;
+
+        // Rotation
+        if pressed_keys.contains(&KeyCode::ArrowUp) {
+            self.camera_rot.x += rotation_speed;
+        }
+        if pressed_keys.contains(&KeyCode::ArrowDown) {
+            self.camera_rot.x -= rotation_speed;
+        }
+        if pressed_keys.contains(&KeyCode::ArrowLeft) {
+            self.camera_rot.y += rotation_speed;
+        }
+        if pressed_keys.contains(&KeyCode::ArrowRight) {
+            self.camera_rot.y -= rotation_speed;
+        }
+        // Clamp pitch
+        self.camera_rot.x = self.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
+
+        // Movement
+        let (sin_y, cos_y) = self.camera_rot.y.sin_cos();
+        if pressed_keys.contains(&KeyCode::KeyW) {
+            self.camera_pos.x += cos_y * move_speed;
+            self.camera_pos.z += sin_y * move_speed;
+        }
+        if pressed_keys.contains(&KeyCode::KeyS) {
+            self.camera_pos.x -= cos_y * move_speed;
+            self.camera_pos.z -= sin_y * move_speed;
+        }
+        if pressed_keys.contains(&KeyCode::KeyA) {
+            self.camera_pos.x -= sin_y * move_speed;
+            self.camera_pos.z += cos_y * move_speed;
+        }
+        if pressed_keys.contains(&KeyCode::KeyD) {
+            self.camera_pos.x += sin_y * move_speed;
+            self.camera_pos.z -= cos_y * move_speed;
+        }
+        if pressed_keys.contains(&KeyCode::Space) {
+            self.camera_pos.y += move_speed;
+        }
+        if pressed_keys.contains(&KeyCode::ShiftLeft) {
+            self.camera_pos.y -= move_speed;
+        }
+    }
 }

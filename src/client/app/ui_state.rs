@@ -1,4 +1,8 @@
-use crate::client::rendering::apprenderconfig::AppRenderConfig;
+use crate::client::client::config::{
+    mesh_config::{MeshConfig, MeshFlags},
+    push_constant_config::{PushConstantConfig, PushConstantFlags},
+    render_config::{RenderConfig, RenderFlags},
+};
 
 #[derive(Default)]
 pub struct UIState {
@@ -37,11 +41,11 @@ pub struct RenderConfigData {
 }
 
 impl RenderConfigData {
-    pub fn new(config: &AppRenderConfig) -> Self {
+    pub fn new() -> Self {
         RenderConfigData {
-            render_textures: config.get_render_textures_bit(),
-            cull_chunk_faces: config.get_cull_chunk_faces_bit(),
-            greedy_meshing: config.get_greedy_meshing_bit(),
+            render_textures: PushConstantConfig::get(PushConstantFlags::RENDER_TEXTURES),
+            cull_chunk_faces: RenderConfig::get(RenderFlags::CULL_FACES),
+            greedy_meshing: MeshConfig::get(MeshFlags::GREEDY_MESH),
         }
     }
 }

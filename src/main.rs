@@ -7,8 +7,8 @@ use winit::platform::x11::EventLoopBuilderExtX11;
 
 use crate::{
     client::{
+        app::app::App,
         connection_details::{ClientConnectionType, LocalConnectionDetails},
-        rendering::app::App,
     },
     server::server::Server,
     shared::communication::{

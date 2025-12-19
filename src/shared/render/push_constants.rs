@@ -1,5 +1,5 @@
 use crate::{
-    client::rendering::apprenderconfig::AppRenderConfig,
+    client::client::config::push_constant_config::PushConstantConfig,
     shared::{
         coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
         render::per_draw_data::PerDrawData,
@@ -10,7 +10,6 @@ use crate::{
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PushConstants {
     pub pvm: nalgebra_glm::Mat4,
-    pub render_config: AppRenderConfig,
     pub per_draw_data: PerDrawData,
     pub chunk_pos: [i32; 3],
 }
@@ -53,11 +52,8 @@ impl PushConstants {
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
-    pub fn update_render_config(
-        renderpass: &mut wgpu::RenderPass<'_>,
-        render_config: &AppRenderConfig,
-    ) {
-        let data = render_config.push_constant_data;
+    pub fn update_render_config(renderpass: &mut wgpu::RenderPass<'_>) {
+        let data = PushConstantConfig::get_raw();
         renderpass.set_push_constants(
             wgpu::ShaderStages::VERTEX,
             ARG_1_SIZE,

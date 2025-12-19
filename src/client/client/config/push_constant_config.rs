@@ -19,7 +19,7 @@ pub struct PushConstantConfig {
 }
 
 impl PushConstantConfig {
-    pub fn get_raw() -> Self {
+    pub fn get_full() -> Self {
         let raw = PUSH_CONSTANT_CONFIG_ATOMIC
             .data
             .load(std::sync::atomic::Ordering::SeqCst);
@@ -27,6 +27,14 @@ impl PushConstantConfig {
         PushConstantConfig {
             render_textures: (raw & 0b1 << PushConstantFlags::RENDER_TEXTURES) != 0,
         }
+    }
+
+    pub fn get_raw() -> u32 {
+        let raw = PUSH_CONSTANT_CONFIG_ATOMIC
+            .data
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        raw
     }
 
     pub fn update_full(&self) {
@@ -39,7 +47,7 @@ impl PushConstantConfig {
     }
 
     #[inline]
-    fn set(mask: u32, value: bool) {
+    pub fn set(mask: u32, value: bool) {
         PUSH_CONSTANT_CONFIG_ATOMIC
             .data
             .fetch_update(
@@ -59,7 +67,7 @@ impl PushConstantConfig {
     }
 
     #[inline]
-    fn get(mask: u32) -> bool {
+    pub fn get(mask: u32) -> bool {
         let data = PUSH_CONSTANT_CONFIG_ATOMIC
             .data
             .load(std::sync::atomic::Ordering::SeqCst);
@@ -67,7 +75,7 @@ impl PushConstantConfig {
     }
 
     #[inline]
-    fn toggle(mask: u32) {
+    pub fn toggle(mask: u32) {
         PUSH_CONSTANT_CONFIG_ATOMIC
             .data
             .fetch_xor(mask, std::sync::atomic::Ordering::SeqCst);

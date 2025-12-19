@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    client::rendering::{apprenderconfig::AppRenderConfig, client_chunk::ClientChunk},
+    client::client::{
+        client_chunk::ClientChunk,
+        config::mesh_config::{MeshConfig, MeshFlags},
+    },
     shared::{
         constants::{CHUNK_POS_BITS, CHUNK_SIZE, ChunkBitRow},
         coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
@@ -18,11 +21,7 @@ pub struct SendableChunkMesh {
     pub pos: ChunkPos,
 }
 
-pub type MeshJob = (
-    Arc<ClientChunk>,
-    [Option<Arc<ClientChunk>>; 6],
-    AppRenderConfig,
-);
+pub type MeshJob = (Arc<ClientChunk>, [Option<Arc<ClientChunk>>; 6]);
 
 impl SendableChunkMesh {
     pub fn make_mesh(job: &MeshJob) -> SendableChunkMesh {
@@ -185,7 +184,7 @@ impl SendableChunkMesh {
 
                         let remaining_bits = faces[i][i_curr] >> tz;
                         let width;
-                        if job.2.get_greedy_meshing_bit() {
+                        if MeshConfig::get(MeshFlags::GREEDY_MESH) {
                             width = remaining_bits.trailing_ones() as usize;
                         } else {
                             width = 1;
@@ -199,7 +198,7 @@ impl SendableChunkMesh {
 
                         let mut height = 1;
 
-                        if job.2.get_greedy_meshing_bit() {
+                        if MeshConfig::get(MeshFlags::GREEDY_MESH) {
                             for h in 1..(CHUNK_SIZE - y) {
                                 let next_row_idx = (y + h) + z * CHUNK_SIZE;
 
