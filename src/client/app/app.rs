@@ -23,7 +23,6 @@ use crate::client::rendering::ui_state::{
     PopupWindow, RenderConfigData, UIState, WorldSizePopupData,
 };
 use crate::shared::communication::client_packet::{ClientAction, ClientPacket};
-use crate::shared::communication::player_data::ConnectionType;
 use crate::shared::communication::player_id::PlayerId;
 use crate::shared::communication::server_packet::ServerPacket;
 use crate::shared::coordinate_systems::chunk_pos::ChunkPos;
@@ -36,8 +35,6 @@ pub struct App {
     pub renderer: Option<Renderer>,
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
-    pub chunks: HashMap<ChunkPos, ArcSwap<ClientChunk>>,
-    pub dirty_chunks: HashSet<ChunkPos>,
     pub app_info: AppInfo,
     pub app_render_config: AppRenderConfig,
     render_results: RenderResults,
@@ -53,10 +50,7 @@ impl App {
             renderer: None,
             gui_state: None,
             pressed_keys: Default::default(),
-            chunks: Default::default(),
-            dirty_chunks: Default::default(),
             app_info: Default::default(),
-            app_render_config: Default::default(),
             render_results: Default::default(),
             ui_state: Default::default(),
             player_id: Some(player_id),

@@ -4,7 +4,6 @@ cargo-features = ["profile-rustflags", "codegen-backend"]
 name = "app"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.90"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -49,9 +48,9 @@ lto = "fat"
 codegen-units = 1
 
 [profile.release-prof]
-inherits = "release" 
+inherits = "release"
 debug = true
-debug-assertions = false 
+debug-assertions = false
 overflow-checks = false
 rustflags = [
     "-C", "force-frame-pointers=yes",

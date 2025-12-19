@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
 
 use arc_swap::ArcSwap;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
@@ -24,8 +21,6 @@ pub struct Renderer {
     egui_renderer: egui_wgpu::Renderer,
     scene: Scene,
     chunk_ssbo: SSBOAllocator,
-    job_sender: std::sync::mpsc::Sender<MeshJob>,
-    mesh_receiver: std::sync::mpsc::Receiver<SendableChunkMesh>,
 }
 
 impl Renderer {
@@ -57,24 +52,12 @@ impl Renderer {
 
         let scene = Scene::new(&gpu.device, gpu.surface_format, chunk_ssbo.get_buffer());
 
-        let (mesh_job_tx, mesh_job_rx) = std::sync::mpsc::channel::<MeshJob>();
-        let (mesh_tx, mesh_rx) = std::sync::mpsc::channel::<SendableChunkMesh>();
-
-        std::thread::spawn(move || {
-            for job in mesh_job_rx {
-                let sendable = SendableChunkMesh::make_mesh(&job);
-                mesh_tx.send(sendable).unwrap();
-            }
-        });
-
         Self {
             gpu,
             depth_texture_view,
             egui_renderer,
             scene,
             chunk_ssbo,
-            job_sender: mesh_job_tx,
-            mesh_receiver: mesh_rx,
         }
     }
 
@@ -111,47 +94,6 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-
-        let dirty_keys = dirty_chunks;
-
-        for key in dirty_keys.iter() {
-            if let Some(chunk) = chunks_mut.get(key) {
-                let chunk_pos_right = ChunkPos::new(key.x + 1, key.y, key.z);
-                let chunk_pos_left = ChunkPos::new(key.x - 1, key.y, key.z);
-                let chunk_pos_up = ChunkPos::new(key.x, key.y + 1, key.z);
-                let chunk_pos_down = ChunkPos::new(key.x, key.y - 1, key.z);
-                let chunk_pos_forward = ChunkPos::new(key.x, key.y, key.z + 1);
-                let chunk_pos_backward = ChunkPos::new(key.x, key.y, key.z - 1);
-
-                let nearby_chunks: [Option<Arc<ClientChunk>>; 6] = [
-                    chunks_mut.get(&chunk_pos_right).map(|c| c.load_full()),
-                    chunks_mut.get(&chunk_pos_left).map(|c| c.load_full()),
-                    chunks_mut.get(&chunk_pos_up).map(|c| c.load_full()),
-                    chunks_mut.get(&chunk_pos_down).map(|c| c.load_full()),
-                    chunks_mut.get(&chunk_pos_forward).map(|c| c.load_full()),
-                    chunks_mut.get(&chunk_pos_backward).map(|c| c.load_full()),
-                ];
-
-                let loaded_chunk = chunk.load_full();
-
-                self.job_sender
-                    .send((loaded_chunk, nearby_chunks, render_config.clone()))
-                    .unwrap();
-            }
-        }
-
-        dirty_keys.clear();
-
-        for sent_mesh in self.mesh_receiver.try_iter() {
-            let chunk = chunks_mut.get(&sent_mesh.pos);
-            if let Some(existing_chunk) = chunk {
-                let mut new_chunk = (*(existing_chunk.load_full())).clone();
-                new_chunk
-                    .mesh
-                    .update_mesh(&self.gpu.queue, &mut self.chunk_ssbo, &sent_mesh);
-                existing_chunk.store(Arc::new(new_chunk));
-            }
-        }
 
         self.egui_renderer.update_buffers(
             &self.gpu.device,
