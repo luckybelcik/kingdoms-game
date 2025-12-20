@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     sync::mpsc::{Receiver, Sender},
     time::Instant,
 };
@@ -13,6 +14,8 @@ pub struct PlayerData {
     pub name: String,
     pub position: EntityPos,
     pub chunk_tick_position: ChunkPos,
+    pub visible_chunks: HashSet<ChunkPos>,
+    pub chunks_awaiting_generation: HashSet<ChunkPos>,
     pub connection_type: ConnectionType,
     pub last_ping: Instant,
     pub render_distance: u8,

@@ -101,7 +101,7 @@ impl Client {
                 let mesh = StoredChunkMesh::new_empty();
                 let pos = chunk.get_chunk_pos();
                 let client_chunk = ArcSwap::new(Arc::new(ClientChunk::new(
-                    Arc::try_unwrap(chunk).unwrap(),
+                    Arc::unwrap_or_clone(chunk),
                     mesh,
                 )));
                 self.chunks.insert(pos, client_chunk);

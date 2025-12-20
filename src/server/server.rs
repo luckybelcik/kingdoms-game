@@ -4,7 +4,7 @@ use std::{
         Arc,
         mpsc::{Receiver, Sender},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use arc_swap::ArcSwap;
@@ -21,22 +21,94 @@ use crate::shared::{
     coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
 };
 
+pub type ChunkgenJob = ChunkPos;
+pub type GeneratedChunk = (ChunkPos, Chunk);
+
 pub struct Server {
     pub chunks: HashMap<ChunkPos, ArcSwap<Chunk>>,
     pub dirty_chunks: HashSet<ChunkPos>,
+    pub generating_chunks: HashSet<ChunkPos>,
     pub players: HashMap<PlayerId, PlayerData>,
     pub new_chunk_queues: HashMap<PlayerId, VecDeque<ServerPacket>>,
     pub tick: u128,
+    chunkgen_job_sender: Sender<ChunkgenJob>,
+    generated_chunk_receiver: Receiver<GeneratedChunk>,
 }
 
 impl Server {
     pub fn new() -> Self {
+        let (chunkgen_job_sender, chunkgen_job_receiver) =
+            std::sync::mpsc::channel::<ChunkgenJob>();
+        let (generated_chunk_sender, generated_chunk_receiver) =
+            std::sync::mpsc::channel::<GeneratedChunk>();
+
+        std::thread::Builder::new()
+            .name("ServerChunkGenThread".to_string())
+            .spawn(move || {
+                loop {
+                    if let Ok(job) = chunkgen_job_receiver.recv() {
+                        let sender = generated_chunk_sender.clone();
+
+                        rayon::spawn(move || {
+                            let chunk = Chunk::generate(job);
+                            let _ = sender.send((job, chunk));
+                        });
+                    }
+                }
+            })
+            .unwrap();
+
         Self {
             chunks: HashMap::new(),
             dirty_chunks: HashSet::new(),
+            generating_chunks: HashSet::new(),
             players: HashMap::new(),
             new_chunk_queues: HashMap::new(),
             tick: 0,
+            chunkgen_job_sender,
+            generated_chunk_receiver,
+        }
+    }
+
+    pub fn run_tick_loop(&mut self) {
+        const TICK_RATE: u32 = 20;
+        let tick_duration: Duration = Duration::from_secs_f64(1.0 / TICK_RATE as f64);
+
+        loop {
+            let frame_start = Instant::now();
+
+            self.update();
+
+            let mut packets = Vec::new();
+
+            for player in self.players.values() {
+                match &player.connection_type {
+                    ConnectionType::Local(_sender, receiver) => {
+                        while let Ok(packet) = receiver.try_recv() {
+                            packets.push(packet);
+                        }
+                    }
+                    ConnectionType::Remote => {
+                        unimplemented!("Remoted players not implemented yet")
+                    }
+                }
+            }
+
+            for packet in packets {
+                self.handle_client_packet(packet);
+            }
+
+            self.receive_chunk_from_generation();
+            self.load_chunks();
+            self.send_chunk_packets();
+
+            let elapsed = frame_start.elapsed();
+
+            if elapsed < tick_duration {
+                std::thread::sleep(tick_duration - elapsed);
+            } else {
+                eprintln!("Server tick took too long: {:?}", elapsed);
+            }
         }
     }
 
@@ -50,6 +122,8 @@ impl Server {
             name: "Local".to_string(),
             position: EntityPos::new(0.0, 0.0, 0.0),
             chunk_tick_position: ChunkPos::new(0, 500, 0),
+            visible_chunks: HashSet::new(),
+            chunks_awaiting_generation: HashSet::new(),
             connection_type: ConnectionType::Local(server_sender, client_receiver),
             last_ping: Instant::now(),
             render_distance: 6,
@@ -80,6 +154,7 @@ impl Server {
     pub fn load_chunks(&mut self) {
         for (player_id, player_data) in self.players.iter_mut() {
             let player_chunk_pos = player_data.position.to_block_pos().to_chunk_pos();
+            // If player chunk pos changed, load new chunks
             if player_chunk_pos != player_data.chunk_tick_position {
                 let current_nearby_chunks =
                     get_chunks_in_radius(player_chunk_pos, player_data.render_distance);
@@ -97,54 +172,99 @@ impl Server {
                     .cloned()
                     .collect();
 
-                for chunk_pos in to_load {
-                    Self::load_chunk(
+                for chunk_pos in to_load.iter().as_ref() {
+                    let result = Self::load_chunk(
                         &mut self.chunks,
                         &mut self.new_chunk_queues,
+                        &self.chunkgen_job_sender,
                         player_id,
                         chunk_pos,
                     );
+
+                    if result == false {
+                        player_data
+                            .chunks_awaiting_generation
+                            .insert(chunk_pos.clone());
+                    }
                 }
-                for chunk_pos in to_unload {
+
+                for chunk_pos in to_unload.iter().as_ref() {
                     Self::unload_chunk(&mut self.chunks, &mut self.dirty_chunks, chunk_pos);
                 }
+
+                player_data.visible_chunks = current_nearby_chunks;
             }
+
+            let mut pos_to_remove = Vec::new();
+
+            // Check if old chunks got generated and load them if they did
+            for awaited_chunk_pos in player_data.chunks_awaiting_generation.iter() {
+                if self.chunks.contains_key(awaited_chunk_pos) {
+                    let result = Self::load_chunk(
+                        &mut self.chunks,
+                        &mut self.new_chunk_queues,
+                        &self.chunkgen_job_sender,
+                        player_id,
+                        awaited_chunk_pos,
+                    );
+
+                    if result {
+                        pos_to_remove.push(awaited_chunk_pos.clone());
+                    }
+                }
+            }
+
+            for pos in pos_to_remove {
+                let _ = player_data.chunks_awaiting_generation.remove(&pos);
+            }
+
             player_data.chunk_tick_position = player_data.position.to_block_pos().to_chunk_pos();
         }
     }
 
+    /// Returns true if chunk was sent, returns false if chunk was scheduled for generation
     fn load_chunk(
         chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
         new_chunk_queues: &mut HashMap<PlayerId, VecDeque<ServerPacket>>,
+        job_sender: &Sender<ChunkgenJob>,
         player_id: &PlayerId,
-        chunk_pos: ChunkPos,
-    ) {
-        if let Some(chunk) = chunks.get(&chunk_pos) {
+        chunk_pos: &ChunkPos,
+    ) -> bool {
+        if let Some(chunk) = chunks.get(chunk_pos) {
             let chunk_arc = chunk.load_full();
             if let Some(queue) = new_chunk_queues.get_mut(player_id) {
                 queue.push_back(ServerPacket::Chunk(chunk_arc.clone()));
             }
-            return;
+            return true;
         }
 
-        let chunk = Arc::new(Chunk::generate(chunk_pos));
-        if let Some(queue) = new_chunk_queues.get_mut(player_id) {
-            queue.push_back(ServerPacket::Chunk(Arc::new((*chunk).clone())));
-        };
-        chunks.insert(chunk_pos, ArcSwap::new(chunk));
+        Self::upload_chunk_for_generation(job_sender, chunk_pos);
+        return false;
     }
 
     fn unload_chunk(
         chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
         dirty_chunks: &mut HashSet<ChunkPos>,
-        chunk_pos: ChunkPos,
+        chunk_pos: &ChunkPos,
     ) {
-        if chunks.contains_key(&chunk_pos) {
-            chunks.remove(&chunk_pos);
+        if chunks.contains_key(chunk_pos) {
+            chunks.remove(chunk_pos);
         }
 
-        if dirty_chunks.contains(&chunk_pos) {
-            dirty_chunks.remove(&chunk_pos);
+        if dirty_chunks.contains(chunk_pos) {
+            dirty_chunks.remove(chunk_pos);
+        }
+    }
+
+    fn upload_chunk_for_generation(job_sender: &Sender<ChunkgenJob>, chunk_pos: &ChunkPos) {
+        job_sender
+            .send(chunk_pos.clone())
+            .expect("Failed to send ChunkgenJob");
+    }
+
+    pub fn receive_chunk_from_generation(&mut self) {
+        if let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv() {
+            self.chunks.insert(pos, ArcSwap::new(Arc::new(chunk)));
         }
     }
 
