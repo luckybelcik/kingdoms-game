@@ -26,12 +26,22 @@ impl Mesher {
         let (job_sender, job_receiver) = std::sync::mpsc::channel::<MeshJob>();
         let (mesh_sender, mesh_receiver) = std::sync::mpsc::channel::<SendableChunkMesh>();
 
-        std::thread::spawn(move || {
-            for job in job_receiver {
-                let sendable = SendableChunkMesh::make_mesh(&job);
-                mesh_sender.send(sendable).unwrap();
-            }
-        });
+        std::thread::Builder::new()
+            .name("ClientMeshingThread".to_string())
+            .spawn(move || {
+                for job in job_receiver {
+                    let sender_clone = mesh_sender.clone();
+
+                    rayon::spawn(move || {
+                        let sendable = SendableChunkMesh::make_mesh(&job);
+
+                        if let Err(error) = sender_clone.send(sendable) {
+                            eprintln!("Failed to send mesh: {}", error)
+                        }
+                    });
+                }
+            })
+            .unwrap();
 
         return Mesher {
             job_sender,
