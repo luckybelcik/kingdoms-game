@@ -292,8 +292,12 @@ impl Server {
     }
 
     pub fn receive_chunk_from_generation(&mut self) {
-        while let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv() {
+        let mut i = 0;
+        while let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv()
+            && i < 20
+        {
             self.chunks.insert(pos, ArcSwap::new(Arc::new(chunk)));
+            i += 1;
         }
     }
 
