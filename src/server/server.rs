@@ -1,7 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BinaryHeap, HashMap, HashSet, VecDeque},
     sync::{
-        Arc,
+        Arc, Condvar, Mutex,
         mpsc::{Receiver, Sender},
     },
     time::{Duration, Instant},
@@ -10,15 +10,18 @@ use std::{
 use arc_swap::ArcSwap;
 use nalgebra_glm::IVec3;
 
-use crate::shared::{
-    chunk::Chunk,
-    communication::{
-        client_packet::{ClientAction, ClientPacket},
-        player_data::{ConnectionType, PlayerData},
-        player_id::PlayerId,
-        server_packet::ServerPacket,
+use crate::{
+    server::prioritized_job::PrioritizedJob,
+    shared::{
+        chunk::Chunk,
+        communication::{
+            client_packet::{ClientAction, ClientPacket},
+            player_data::{ConnectionType, PlayerData},
+            player_id::PlayerId,
+            server_packet::ServerPacket,
+        },
+        coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
     },
-    coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
 };
 
 pub type ChunkgenJob = ChunkPos;
@@ -31,27 +34,37 @@ pub struct Server {
     pub players: HashMap<PlayerId, PlayerData>,
     pub new_chunk_queues: HashMap<PlayerId, VecDeque<ServerPacket>>,
     pub tick: u128,
-    chunkgen_job_sender: Sender<ChunkgenJob>,
+    chunkgen_job_queue: Arc<(Mutex<BinaryHeap<PrioritizedJob>>, Condvar)>,
     generated_chunk_receiver: Receiver<GeneratedChunk>,
 }
 
 impl Server {
     pub fn new() -> Self {
-        let (chunkgen_job_sender, chunkgen_job_receiver) =
-            std::sync::mpsc::channel::<ChunkgenJob>();
+        let queue: Arc<(Mutex<BinaryHeap<PrioritizedJob>>, Condvar)> =
+            Arc::new((Mutex::new(BinaryHeap::new()), Condvar::new()));
         let (generated_chunk_sender, generated_chunk_receiver) =
             std::sync::mpsc::channel::<GeneratedChunk>();
 
+        let queue_clone = queue.clone();
         std::thread::Builder::new()
             .name("ServerChunkGenThread".to_string())
             .spawn(move || {
                 loop {
-                    if let Ok(job) = chunkgen_job_receiver.recv() {
-                        let sender = generated_chunk_sender.clone();
+                    let (lock, cvar) = &*queue_clone;
+                    let mut heap = lock.lock().unwrap();
 
+                    while heap.is_empty() {
+                        heap = cvar.wait(heap).unwrap();
+                    }
+
+                    if let Some(job) = heap.pop() {
+                        drop(heap);
+
+                        let pos = job.pos;
+                        let generated_chunk_sender_copy = generated_chunk_sender.clone();
                         rayon::spawn(move || {
-                            let chunk = Chunk::generate(job);
-                            let _ = sender.send((job, chunk));
+                            let chunk = Chunk::generate(pos.clone());
+                            let _ = generated_chunk_sender_copy.send((pos, chunk));
                         });
                     }
                 }
@@ -65,7 +78,7 @@ impl Server {
             players: HashMap::new(),
             new_chunk_queues: HashMap::new(),
             tick: 0,
-            chunkgen_job_sender,
+            chunkgen_job_queue: queue,
             generated_chunk_receiver,
         }
     }
@@ -176,8 +189,9 @@ impl Server {
                     let result = Self::load_chunk(
                         &mut self.chunks,
                         &mut self.new_chunk_queues,
-                        &self.chunkgen_job_sender,
+                        &self.chunkgen_job_queue,
                         player_id,
+                        &player_chunk_pos,
                         chunk_pos,
                     );
 
@@ -203,8 +217,9 @@ impl Server {
                     let result = Self::load_chunk(
                         &mut self.chunks,
                         &mut self.new_chunk_queues,
-                        &self.chunkgen_job_sender,
+                        &self.chunkgen_job_queue,
                         player_id,
+                        &player_chunk_pos,
                         awaited_chunk_pos,
                     );
 
@@ -226,8 +241,9 @@ impl Server {
     fn load_chunk(
         chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
         new_chunk_queues: &mut HashMap<PlayerId, VecDeque<ServerPacket>>,
-        job_sender: &Sender<ChunkgenJob>,
+        job_queue: &Arc<(Mutex<BinaryHeap<PrioritizedJob>>, Condvar)>,
         player_id: &PlayerId,
+        player_chunk_pos: &ChunkPos,
         chunk_pos: &ChunkPos,
     ) -> bool {
         if let Some(chunk) = chunks.get(chunk_pos) {
@@ -238,7 +254,7 @@ impl Server {
             return true;
         }
 
-        Self::upload_chunk_for_generation(job_sender, chunk_pos);
+        Self::upload_chunk_for_generation(job_queue, chunk_pos, player_chunk_pos);
         return false;
     }
 
@@ -256,14 +272,27 @@ impl Server {
         }
     }
 
-    fn upload_chunk_for_generation(job_sender: &Sender<ChunkgenJob>, chunk_pos: &ChunkPos) {
-        job_sender
-            .send(chunk_pos.clone())
-            .expect("Failed to send ChunkgenJob");
+    fn upload_chunk_for_generation(
+        job_queue: &Arc<(Mutex<BinaryHeap<PrioritizedJob>>, Condvar)>,
+        chunk_pos: &ChunkPos,
+        player_pos: &ChunkPos,
+    ) {
+        let (lock, cvar) = &**job_queue;
+        let mut heap = lock.lock().unwrap();
+
+        let dist = (chunk_pos.x - player_pos.x).abs()
+            + (chunk_pos.y - player_pos.y).abs()
+            + (chunk_pos.z - player_pos.z).abs();
+
+        heap.push(PrioritizedJob {
+            priority: dist,
+            pos: chunk_pos.clone(),
+        });
+        cvar.notify_one();
     }
 
     pub fn receive_chunk_from_generation(&mut self) {
-        if let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv() {
+        while let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv() {
             self.chunks.insert(pos, ArcSwap::new(Arc::new(chunk)));
         }
     }
@@ -283,9 +312,11 @@ impl Server {
     fn send_packet(player_data: &PlayerData, server_packet: ServerPacket) {
         match &player_data.connection_type {
             ConnectionType::Local(server_packet_sender, _) => {
-                server_packet_sender
-                    .send(server_packet)
-                    .expect("Failed to send server packet");
+                let result = server_packet_sender.send(server_packet);
+
+                if let Err(error) = result {
+                    eprintln!("Error sending packet: {}", error);
+                }
             }
             ConnectionType::Remote => {
                 unimplemented!("cant send remotely yet");
