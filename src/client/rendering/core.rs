@@ -1,4 +1,3 @@
-#[cfg(debug_assertions)]
 use crate::client::client::config::render_config::{RenderConfig, RenderFlags};
 use crate::{
     client::{

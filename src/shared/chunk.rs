@@ -55,17 +55,30 @@ impl Chunk {
 
     // unsafe version without the fancy types
     fn set_block_unsafe(&mut self, x: u8, y: u8, z: u8, block: u16) {
-        if x < CHUNK_SIZE as u8 || y < CHUNK_SIZE as u8 || z < CHUNK_SIZE as u8 {
-            self.blocks
-                [x as usize + y as usize * CHUNK_SIZE + z as usize * CHUNK_SIZE * CHUNK_SIZE] =
-                block;
-            if block == 0 {
-                self.chunk_mask[y as usize + z as usize * CHUNK_SIZE] &= !(1 << x);
-                self.xz_swap_chunk_mask[y as usize + x as usize * CHUNK_SIZE] &= !(1 << z);
-            } else {
-                self.chunk_mask[y as usize + z as usize * CHUNK_SIZE] |= 1 << x;
-                self.xz_swap_chunk_mask[y as usize + x as usize * CHUNK_SIZE] |= 1 << z;
-            }
+        if x >= CHUNK_SIZE as u8 || y >= CHUNK_SIZE as u8 || z >= CHUNK_SIZE as u8 {
+            return;
+        }
+
+        let x_u = x as usize;
+        let y_u = y as usize;
+        let z_u = z as usize;
+
+        let block_idx = x_u + (y_u * CHUNK_SIZE) + (z_u * CHUNK_SIZE * CHUNK_SIZE);
+        let mask_idx_a = y_u + (z_u * CHUNK_SIZE);
+        let mask_idx_b = y_u + (x_u * CHUNK_SIZE);
+
+        unsafe {
+            *self.blocks.get_unchecked_mut(block_idx) = block;
+
+            let is_not_air = (block != 0) as u64;
+
+            let bit_x = 1u64 << x;
+            let mask_a = self.chunk_mask.get_unchecked_mut(mask_idx_a);
+            *mask_a = (*mask_a & !bit_x) | (is_not_air.wrapping_neg() & bit_x);
+
+            let bit_z = 1u64 << z;
+            let mask_b = self.xz_swap_chunk_mask.get_unchecked_mut(mask_idx_b);
+            *mask_b = (*mask_b & !bit_z) | (is_not_air.wrapping_neg() & bit_z);
         }
     }
 
