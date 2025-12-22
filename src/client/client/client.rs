@@ -119,6 +119,9 @@ impl Client {
             ServerPacket::DebugChunk(data) => {
                 println!("Chunk debug data: {:?}", data);
             }
+            ServerPacket::Denial(reason) => {
+                println!("Packet denied: {}", reason.message())
+            }
         }
     }
 

@@ -11,6 +11,7 @@ use crate::shared::{
 
 #[derive(Debug)]
 pub struct PlayerData {
+    pub player_permissions: PlayerPermissions,
     pub name: String,
     pub position: EntityPos,
     pub chunk_tick_position: ChunkPos,
@@ -57,4 +58,29 @@ pub struct SendablePlayerData {
     pub connection_type: SendableConnectionType,
     pub last_ping: Instant,
     pub render_distance: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum PlayerPermissions {
+    None = 0,   // basically no permissions
+    Helper = 1, // non-destructive permissions
+    Admin = 2,  // destructive permissions
+}
+
+impl PlayerPermissions {
+    pub fn at_least_helper(&self) -> bool {
+        match self {
+            PlayerPermissions::None => false,
+            PlayerPermissions::Helper => true,
+            PlayerPermissions::Admin => true,
+        }
+    }
+
+    pub fn is_admin(&self) -> bool {
+        match self {
+            PlayerPermissions::None => false,
+            PlayerPermissions::Helper => false,
+            PlayerPermissions::Admin => true,
+        }
+    }
 }

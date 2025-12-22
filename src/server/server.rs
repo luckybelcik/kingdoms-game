@@ -16,9 +16,9 @@ use crate::{
         chunk::Chunk,
         communication::{
             client_packet::{ClientAction, ClientPacket},
-            player_data::{ConnectionType, PlayerData},
+            player_data::{ConnectionType, PlayerData, PlayerPermissions},
             player_id::PlayerId,
-            server_packet::{DebugChunkData, ServerPacket},
+            server_packet::{DebugChunkData, DenialReason, ServerPacket},
         },
         coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
     },
@@ -132,6 +132,7 @@ impl Server {
         client_receiver: Receiver<ClientPacket>,
     ) {
         let player_data = PlayerData {
+            player_permissions: PlayerPermissions::Admin,
             name: "Local".to_string(),
             position: EntityPos::new(0.0, 0.0, 0.0),
             chunk_tick_position: ChunkPos::new(0, 500, 0),
@@ -155,21 +156,23 @@ impl Server {
             }
             ClientAction::DebugPlayer => {
                 if let Some(player_data) = self.players.get_mut(&player_id) {
-                    Self::send_packet(
+                    Self::send_packet_if_permitted(
                         &player_data,
                         ServerPacket::DebugPlayer(Box::new(player_data.to_sendable())),
+                        PlayerPermissions::Helper,
                     );
                 }
             }
             ClientAction::DebugChunks => {
                 if let Some(player_data) = self.players.get_mut(&player_id) {
-                    Self::send_packet(
+                    Self::send_packet_if_permitted(
                         &player_data,
                         ServerPacket::DebugChunk(Box::new(DebugChunkData {
                             chunk_count: self.chunks.len() as u32,
                             dirty_chunks: self.dirty_chunks.len() as u32,
                             generating_chunks: self.generating_chunks.len() as u32,
                         })),
+                        PlayerPermissions::Helper,
                     );
                 }
             }
@@ -337,6 +340,21 @@ impl Server {
             ConnectionType::Remote => {
                 unimplemented!("cant send remotely yet");
             }
+        }
+    }
+
+    fn send_packet_if_permitted(
+        player_data: &PlayerData,
+        server_packet: ServerPacket,
+        minimum_permission: PlayerPermissions,
+    ) {
+        if player_data.player_permissions >= minimum_permission {
+            Self::send_packet(player_data, server_packet);
+        } else {
+            Self::send_packet(
+                player_data,
+                ServerPacket::Denial(DenialReason::InsufficientPermissions),
+            );
         }
     }
 

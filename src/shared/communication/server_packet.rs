@@ -7,6 +7,7 @@ pub enum ServerPacket {
     Chunk(Arc<Chunk>),
     DebugPlayer(Box<SendablePlayerData>),
     DebugChunk(Box<DebugChunkData>),
+    Denial(DenialReason),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -14,4 +15,18 @@ pub struct DebugChunkData {
     pub chunk_count: u32,
     pub dirty_chunks: u32,
     pub generating_chunks: u32,
+}
+
+pub enum DenialReason {
+    InsufficientPermissions,
+}
+
+impl DenialReason {
+    pub fn message(&self) -> &'static str {
+        match self {
+            Self::InsufficientPermissions => {
+                "You don't have the permissions to request this packet."
+            }
+        }
+    }
 }
