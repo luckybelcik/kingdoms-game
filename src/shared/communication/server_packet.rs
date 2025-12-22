@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
-use crate::shared::{chunk::Chunk, communication::player_data::SendablePlayerData};
+use crate::shared::{
+    chunk::Chunk,
+    communication::player_data::{ClientPlayerData, SendablePlayerData},
+};
 
 pub enum ServerPacket {
     Ping,
     Chunk(Arc<Chunk>),
+    PlayerData(ClientPlayerData),
     DebugPlayer(Box<SendablePlayerData>),
     DebugChunk(Box<DebugChunkData>),
     Denial(DenialReason),

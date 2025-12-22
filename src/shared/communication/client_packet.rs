@@ -7,6 +7,7 @@ pub struct ClientPacket {
 
 pub enum ClientAction {
     Ping,
+    RequestPlayerData,
     DebugPlayer,
     DebugChunks,
 }

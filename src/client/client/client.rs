@@ -6,9 +6,7 @@ use crate::{
     },
     shared::{
         communication::{
-            client_packet::ClientPacket,
-            player_data::{ClientPlayerData, PlayerPermissions},
-            player_id::PlayerId,
+            client_packet::ClientPacket, player_data::ClientPlayerData, player_id::PlayerId,
             server_packet::ServerPacket,
         },
         coordinate_systems::entity_pos::EntityPos,
@@ -33,7 +31,7 @@ pub struct Client {
     mesher: Mesher,
     pub camera_pos: EntityPos,
     pub camera_rot: Vec3,
-    player_data: ClientPlayerData,
+    player_data: Option<ClientPlayerData>,
     player_id: PlayerId,
     connection_type: ClientConnectionType,
 }
@@ -46,12 +44,7 @@ impl Client {
             mesher: Mesher::create(),
             camera_pos: EntityPos::new(0.0, 0.0, 0.0),
             camera_rot: vec3(0.0, 0.0, 0.0),
-            player_data: ClientPlayerData {
-                player_permissions: PlayerPermissions::Admin,
-                name: "Local".to_string(),
-                position: EntityPos::new(0.0, 0.0, 0.0),
-                render_distance: 6,
-            },
+            player_data: None,
             player_id,
             connection_type,
         }
@@ -122,6 +115,18 @@ impl Client {
                 self.dirty_chunks.insert(pos.offset_copy(0, -1, 0));
                 self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
                 self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
+            }
+            ServerPacket::PlayerData(data) => {
+                if let Some(current_data) = self.player_data.as_ref() {
+                    if current_data != &data {
+                        eprintln!("Client and server desynced.");
+                        ClientPlayerData::log_desync(&current_data, &data);
+                    }
+                } else {
+                    println!("Player data was None; accepting new data from server");
+                    self.camera_pos = data.position.clone();
+                    self.player_data = Some(data);
+                }
             }
             ServerPacket::DebugPlayer(data) => {
                 println!("Player debug data: {:?}", data);

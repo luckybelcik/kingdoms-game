@@ -142,6 +142,10 @@ impl Server {
             last_ping: Instant::now(),
             render_distance: 6,
         };
+        Self::send_packet(
+            &player_data,
+            ServerPacket::PlayerData(player_data.to_client_data()),
+        );
         self.players.insert(player_id.clone(), player_data);
         self.new_chunk_queues.insert(player_id, VecDeque::new());
     }
@@ -152,6 +156,14 @@ impl Server {
             ClientAction::Ping => {
                 if let Some(player_data) = self.players.get_mut(&player_id) {
                     player_data.last_ping = Instant::now();
+                }
+            }
+            ClientAction::RequestPlayerData => {
+                if let Some(player_data) = self.players.get_mut(&player_id) {
+                    Self::send_packet(
+                        &player_data,
+                        ServerPacket::PlayerData(player_data.to_client_data()),
+                    );
                 }
             }
             ClientAction::DebugPlayer => {

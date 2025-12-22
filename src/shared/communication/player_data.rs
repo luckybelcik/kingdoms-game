@@ -36,13 +36,52 @@ impl PlayerData {
             render_distance: self.render_distance,
         }
     }
+
+    pub fn to_client_data(&self) -> ClientPlayerData {
+        ClientPlayerData {
+            player_permissions: self.player_permissions.clone(),
+            name: self.name.clone(),
+            position: self.position.clone(),
+            render_distance: self.render_distance,
+        }
+    }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct ClientPlayerData {
     pub player_permissions: PlayerPermissions,
     pub name: String,
     pub position: EntityPos,
     pub render_distance: u8,
+}
+
+impl ClientPlayerData {
+    pub fn log_desync(data_1: &ClientPlayerData, data_2: &ClientPlayerData) {
+        if data_1.name != data_2.name {
+            eprintln!(
+                "DESYNC: Names desynced (1: {}) (2: {})",
+                data_1.name, data_2.name
+            );
+        }
+        if data_1.player_permissions != data_2.player_permissions {
+            eprintln!(
+                "DESYNC: Permissions desynced (1: {:?}) (2: {:?})",
+                data_1.player_permissions, data_2.player_permissions
+            );
+        }
+        if data_1.position != data_2.position {
+            eprintln!(
+                "DESYNC: Position desynced (1: {:?}) (2: {:?})",
+                data_1.position, data_2.position
+            );
+        }
+        if data_1.render_distance != data_2.render_distance {
+            eprintln!(
+                "DESYNC: Render distance desynced (1: {}) (2: {})",
+                data_1.render_distance, data_2.render_distance
+            );
+        }
+    }
 }
 
 #[derive(Debug)]
