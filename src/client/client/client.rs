@@ -6,7 +6,10 @@ use crate::{
     },
     shared::{
         communication::{
-            client_packet::ClientPacket, player_id::PlayerId, server_packet::ServerPacket,
+            client_packet::ClientPacket,
+            player_data::{ClientPlayerData, PlayerPermissions},
+            player_id::PlayerId,
+            server_packet::ServerPacket,
         },
         coordinate_systems::entity_pos::EntityPos,
     },
@@ -30,6 +33,7 @@ pub struct Client {
     mesher: Mesher,
     pub camera_pos: EntityPos,
     pub camera_rot: Vec3,
+    player_data: ClientPlayerData,
     player_id: PlayerId,
     connection_type: ClientConnectionType,
 }
@@ -42,6 +46,12 @@ impl Client {
             mesher: Mesher::create(),
             camera_pos: EntityPos::new(0.0, 0.0, 0.0),
             camera_rot: vec3(0.0, 0.0, 0.0),
+            player_data: ClientPlayerData {
+                player_permissions: PlayerPermissions::Admin,
+                name: "Local".to_string(),
+                position: EntityPos::new(0.0, 0.0, 0.0),
+                render_distance: 6,
+            },
             player_id,
             connection_type,
         }

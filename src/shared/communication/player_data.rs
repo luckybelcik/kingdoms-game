@@ -38,6 +38,13 @@ impl PlayerData {
     }
 }
 
+pub struct ClientPlayerData {
+    pub player_permissions: PlayerPermissions,
+    pub name: String,
+    pub position: EntityPos,
+    pub render_distance: u8,
+}
+
 #[derive(Debug)]
 pub enum ConnectionType {
     Local(Sender<ServerPacket>, Receiver<ClientPacket>),
