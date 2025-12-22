@@ -18,7 +18,7 @@ use crate::{
             client_packet::{ClientAction, ClientPacket},
             player_data::{ConnectionType, PlayerData},
             player_id::PlayerId,
-            server_packet::ServerPacket,
+            server_packet::{DebugChunkData, ServerPacket},
         },
         coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
     },
@@ -153,11 +153,23 @@ impl Server {
                     player_data.last_ping = Instant::now();
                 }
             }
-            ClientAction::Debug => {
+            ClientAction::DebugPlayer => {
                 if let Some(player_data) = self.players.get_mut(&player_id) {
                     Self::send_packet(
                         &player_data,
-                        ServerPacket::Debug(Box::new(player_data.to_sendable())),
+                        ServerPacket::DebugPlayer(Box::new(player_data.to_sendable())),
+                    );
+                }
+            }
+            ClientAction::DebugChunks => {
+                if let Some(player_data) = self.players.get_mut(&player_id) {
+                    Self::send_packet(
+                        &player_data,
+                        ServerPacket::DebugChunk(Box::new(DebugChunkData {
+                            chunk_count: self.chunks.len() as u32,
+                            dirty_chunks: self.dirty_chunks.len() as u32,
+                            generating_chunks: self.generating_chunks.len() as u32,
+                        })),
                     );
                 }
             }

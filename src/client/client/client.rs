@@ -113,8 +113,11 @@ impl Client {
                 self.dirty_chunks.insert(pos.offset_copy(0, 0, 1));
                 self.dirty_chunks.insert(pos.offset_copy(0, 0, -1));
             }
-            ServerPacket::Debug(data) => {
-                println!("Debug data: {:?}", data);
+            ServerPacket::DebugPlayer(data) => {
+                println!("Player debug data: {:?}", data);
+            }
+            ServerPacket::DebugChunk(data) => {
+                println!("Chunk debug data: {:?}", data);
             }
         }
     }

@@ -272,7 +272,17 @@ impl App {
             if let Some(client) = &mut self.client {
                 client.send_packet(ClientPacket {
                     player_id: client.get_player_id(),
-                    action: ClientAction::Debug,
+                    action: ClientAction::DebugPlayer,
+                });
+            }
+        }
+        if let PhysicalKey::Code(KeyCode::KeyU) = event.physical_key
+            && event.state == ElementState::Pressed
+        {
+            if let Some(client) = &mut self.client {
+                client.send_packet(ClientPacket {
+                    player_id: client.get_player_id(),
+                    action: ClientAction::DebugChunks,
                 });
             }
         }
