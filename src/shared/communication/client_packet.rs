@@ -1,4 +1,6 @@
-use crate::shared::communication::player_id::PlayerId;
+use crate::{
+    client::client::client_actions::PlayerActions, shared::communication::player_id::PlayerId,
+};
 
 pub struct ClientPacket {
     pub player_id: PlayerId,
@@ -8,6 +10,7 @@ pub struct ClientPacket {
 pub enum ClientAction {
     Ping,
     RequestPlayerData,
+    PlayerAction(PlayerActions),
     DebugPlayer,
     DebugChunks,
 }

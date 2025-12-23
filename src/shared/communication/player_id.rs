@@ -1,4 +1,4 @@
-#[derive(Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Clone, Copy)]
 pub struct PlayerId {
     id: u64,
 }

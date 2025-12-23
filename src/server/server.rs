@@ -8,9 +8,10 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use nalgebra_glm::IVec3;
+use nalgebra_glm::{IVec3, distance};
 
 use crate::{
+    client::client::client_actions::PlayerActions,
     server::prioritized_job::PrioritizedJob,
     shared::{
         chunk::Chunk,
@@ -21,6 +22,7 @@ use crate::{
             server_packet::{DebugChunkData, DenialReason, ServerPacket},
         },
         coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
+        util::raycast::cast_ray,
     },
 };
 
@@ -151,32 +153,92 @@ impl Server {
     }
 
     pub fn handle_client_packet(&mut self, client_packet: ClientPacket) {
+        const TICK_RATE: u32 = 20;
+        const FIXED_TIMESTEP: f32 = 1.0 / TICK_RATE as f32;
+
+        let move_speed = 10.0 * FIXED_TIMESTEP;
+
         let player_id = client_packet.player_id;
-        match client_packet.action {
-            ClientAction::Ping => {
-                if let Some(player_data) = self.players.get_mut(&player_id) {
+        if let Some(player_data) = self.players.get_mut(&player_id) {
+            match client_packet.action {
+                ClientAction::Ping => {
                     player_data.last_ping = Instant::now();
                 }
-            }
-            ClientAction::RequestPlayerData => {
-                if let Some(player_data) = self.players.get_mut(&player_id) {
+                ClientAction::RequestPlayerData => {
                     Self::send_packet(
                         &player_data,
                         ServerPacket::PlayerData(player_data.to_client_data()),
                     );
                 }
-            }
-            ClientAction::DebugPlayer => {
-                if let Some(player_data) = self.players.get_mut(&player_id) {
+                ClientAction::PlayerAction(action) => match action {
+                    PlayerActions::BreakBlock(rot, pos) => {
+                        let distance = distance(&pos, &player_data.position);
+                        if distance < 0.5 {
+                            if let Some(raycast_result) = cast_ray(pos, rot, &self.chunks, 64) {
+                                if let Some(chunk) = self.chunks.get_mut(&raycast_result.hit.0) {
+                                    let mut new_client_chunk = (*(chunk.load_full())).clone();
+                                    new_client_chunk.set_block(
+                                        raycast_result.hit.1,
+                                        0,
+                                        &mut self.dirty_chunks,
+                                    );
+                                    chunk.store(Arc::new(new_client_chunk));
+                                }
+                            }
+                        }
+                    }
+                    PlayerActions::PlaceBlock(rot, pos) => {
+                        let distance = distance(&pos, &player_data.position);
+                        if distance < 0.5 {
+                            if let Some(raycast_result) = cast_ray(pos, rot, &self.chunks, 64) {
+                                if let Some(chunk) = self.chunks.get_mut(&raycast_result.previous.0)
+                                {
+                                    let mut new_client_chunk = (*(chunk.load_full())).clone();
+                                    new_client_chunk.set_block(
+                                        raycast_result.previous.1,
+                                        1,
+                                        &mut self.dirty_chunks,
+                                    );
+                                    chunk.store(Arc::new(new_client_chunk));
+                                }
+                            }
+                        }
+                    }
+                    PlayerActions::MoveForwards(rot) => {
+                        let (sin_y, cos_y) = rot.y.sin_cos();
+                        player_data.position.x += cos_y * move_speed;
+                        player_data.position.z += sin_y * move_speed;
+                    }
+                    PlayerActions::MoveBackwards(rot) => {
+                        let (sin_y, cos_y) = rot.y.sin_cos();
+                        player_data.position.x -= cos_y * move_speed;
+                        player_data.position.z -= sin_y * move_speed;
+                    }
+                    PlayerActions::MoveLeft(rot) => {
+                        let (sin_y, cos_y) = rot.y.sin_cos();
+                        player_data.position.x -= sin_y * move_speed;
+                        player_data.position.z += cos_y * move_speed;
+                    }
+                    PlayerActions::MoveRight(rot) => {
+                        let (sin_y, cos_y) = rot.y.sin_cos();
+                        player_data.position.x += sin_y * move_speed;
+                        player_data.position.z -= cos_y * move_speed;
+                    }
+                    PlayerActions::MoveUp => {
+                        player_data.position.y += move_speed;
+                    }
+                    PlayerActions::MoveDown => {
+                        player_data.position.y -= move_speed;
+                    }
+                },
+                ClientAction::DebugPlayer => {
                     Self::send_packet_if_permitted(
                         &player_data,
                         ServerPacket::DebugPlayer(Box::new(player_data.to_sendable())),
                         PlayerPermissions::Helper,
                     );
                 }
-            }
-            ClientAction::DebugChunks => {
-                if let Some(player_data) = self.players.get_mut(&player_id) {
+                ClientAction::DebugChunks => {
                     Self::send_packet_if_permitted(
                         &player_data,
                         ServerPacket::DebugChunk(Box::new(DebugChunkData {

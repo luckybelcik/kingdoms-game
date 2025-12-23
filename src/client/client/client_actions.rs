@@ -1,4 +1,7 @@
+use nalgebra_glm::Vec3;
 use serde::{Deserialize, Serialize};
+
+use crate::shared::coordinate_systems::entity_pos::EntityPos;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientKeybindableActions {
@@ -60,4 +63,15 @@ impl ClientKeybindableActions {
             Self::RequestServerPlayerData => false,
         }
     }
+}
+
+pub enum PlayerActions {
+    BreakBlock(Vec3, EntityPos),
+    PlaceBlock(Vec3, EntityPos),
+    MoveForwards(Vec3),
+    MoveBackwards(Vec3),
+    MoveLeft(Vec3),
+    MoveRight(Vec3),
+    MoveUp,
+    MoveDown,
 }

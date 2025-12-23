@@ -2,7 +2,8 @@ use crate::{
     client::{
         app::appinfo::AppInfo,
         client::{
-            chunk_mesh::StoredChunkMesh, client_actions::ClientKeybindableActions,
+            chunk_mesh::StoredChunkMesh,
+            client_actions::{ClientKeybindableActions, PlayerActions},
             client_chunk::ClientChunk,
         },
         connection_details::ClientConnectionType,
@@ -190,6 +191,13 @@ impl Client {
 
         match action {
             ClientKeybindableActions::BreakBlock => {
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id.clone(),
+                    action: ClientAction::PlayerAction(PlayerActions::BreakBlock(
+                        self.camera_rot,
+                        self.camera_pos,
+                    )),
+                });
                 if let Some(raycast_result) =
                     cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
                 {
@@ -205,6 +213,13 @@ impl Client {
                 }
             }
             ClientKeybindableActions::PlaceBlock => {
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id.clone(),
+                    action: ClientAction::PlayerAction(PlayerActions::PlaceBlock(
+                        self.camera_rot,
+                        self.camera_pos,
+                    )),
+                });
                 if let Some(raycast_result) =
                     cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
                 {
@@ -287,24 +302,52 @@ impl Client {
             ClientKeybindableActions::MoveForwards => {
                 self.camera_pos.x += cos_y * move_speed;
                 self.camera_pos.z += sin_y * move_speed;
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::PlayerAction(PlayerActions::MoveForwards(
+                        self.camera_rot,
+                    )),
+                });
             }
             ClientKeybindableActions::MoveBackwards => {
                 self.camera_pos.x -= cos_y * move_speed;
                 self.camera_pos.z -= sin_y * move_speed;
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::PlayerAction(PlayerActions::MoveBackwards(
+                        self.camera_rot,
+                    )),
+                });
             }
             ClientKeybindableActions::MoveLeft => {
                 self.camera_pos.x -= sin_y * move_speed;
                 self.camera_pos.z += cos_y * move_speed;
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::PlayerAction(PlayerActions::MoveLeft(self.camera_rot)),
+                });
             }
             ClientKeybindableActions::MoveRight => {
                 self.camera_pos.x += sin_y * move_speed;
                 self.camera_pos.z -= cos_y * move_speed;
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::PlayerAction(PlayerActions::MoveRight(self.camera_rot)),
+                });
             }
             ClientKeybindableActions::MoveUp => {
                 self.camera_pos.y += move_speed;
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::PlayerAction(PlayerActions::MoveUp),
+                });
             }
             ClientKeybindableActions::MoveDown => {
                 self.camera_pos.y -= move_speed;
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::PlayerAction(PlayerActions::MoveDown),
+                });
             }
             ClientKeybindableActions::RotateUp => {
                 self.camera_rot.x += rotation_speed;
