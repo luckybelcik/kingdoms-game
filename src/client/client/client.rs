@@ -1,15 +1,21 @@
 use crate::{
     client::{
         app::appinfo::AppInfo,
-        client::{chunk_mesh::StoredChunkMesh, client_chunk::ClientChunk},
+        client::{
+            chunk_mesh::StoredChunkMesh, client_actions::ClientKeybindableActions,
+            client_chunk::ClientChunk,
+        },
         connection_details::ClientConnectionType,
     },
     shared::{
         communication::{
-            client_packet::ClientPacket, player_data::ClientPlayerData, player_id::PlayerId,
+            client_packet::{ClientAction, ClientPacket},
+            player_data::ClientPlayerData,
+            player_id::PlayerId,
             server_packet::ServerPacket,
         },
         coordinate_systems::entity_pos::EntityPos,
+        util::raycast::cast_ray,
     },
 };
 use std::{
@@ -21,7 +27,6 @@ use std::{
 use arc_swap::ArcSwap;
 use nalgebra_glm::{Vec3, vec3};
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
-use winit::keyboard::KeyCode;
 
 use crate::{client::client::mesher::Mesher, shared::coordinate_systems::chunk_pos::ChunkPos};
 
@@ -54,7 +59,12 @@ impl Client {
         self.player_id.clone()
     }
 
-    pub fn handle_client_tick(&mut self, app_info: &mut AppInfo, _delta_seconds: f32) {
+    pub fn handle_client_tick(
+        &mut self,
+        app_info: &mut AppInfo,
+        scheduled_actions: &mut Vec<ClientKeybindableActions>,
+        delta_seconds: f32,
+    ) {
         app_info.chunk_count = self.chunks.len() as u64;
 
         if app_info.chunk_count > 0 && app_info.total_chunk_vram > 1 {
@@ -63,6 +73,10 @@ impl Client {
         }
 
         let mut packets = Vec::new();
+
+        for action in scheduled_actions {
+            self.handle_holdable_client_action(action, delta_seconds);
+        }
 
         match &self.connection_type {
             ClientConnectionType::Local(details) => {
@@ -153,53 +167,152 @@ impl Client {
         }
     }
 
-    pub fn update_camera(
+    pub fn handle_single_press_client_action(&mut self, action: &ClientKeybindableActions) {
+        if action.is_holdable() {
+            return;
+        }
+
+        let player_id = self.player_id.clone();
+
+        match action {
+            ClientKeybindableActions::BreakBlock => {
+                if let Some(raycast_result) =
+                    cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
+                {
+                    if let Some(chunk) = self.chunks.get_mut(&raycast_result.hit.0) {
+                        let mut new_client_chunk = (*(chunk.load_full())).clone();
+                        new_client_chunk.chunk.set_block(
+                            raycast_result.hit.1,
+                            0,
+                            &mut self.dirty_chunks,
+                        );
+                        chunk.store(Arc::new(new_client_chunk));
+                    }
+                }
+            }
+            ClientKeybindableActions::PlaceBlock => {
+                if let Some(raycast_result) =
+                    cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
+                {
+                    if let Some(chunk) = self.chunks.get_mut(&raycast_result.previous.0) {
+                        let mut new_client_chunk = (*(chunk.load_full())).clone();
+                        new_client_chunk.chunk.set_block(
+                            raycast_result.previous.1,
+                            1,
+                            &mut self.dirty_chunks,
+                        );
+                        chunk.store(Arc::new(new_client_chunk));
+                    }
+                }
+            }
+            ClientKeybindableActions::MoveForwards => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::MoveBackwards => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::MoveLeft => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::MoveRight => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::MoveUp => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::MoveDown => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::RotateUp => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::RotateDown => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::RotateLeft => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::RotateRight => {
+                unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::RequestServerPlayerData => {
+                self.send_packet(ClientPacket {
+                    player_id,
+                    action: ClientAction::DebugPlayer,
+                });
+            }
+            ClientKeybindableActions::RequestServerChunkInfo => {
+                self.send_packet(ClientPacket {
+                    player_id,
+                    action: ClientAction::DebugChunks,
+                });
+            }
+        }
+    }
+
+    pub fn handle_holdable_client_action(
         &mut self,
+        action: &ClientKeybindableActions,
         delta_seconds: f32,
-        pressed_keys: &mut egui::ahash::HashSet<KeyCode>,
     ) {
+        if action.is_single_press() {
+            return;
+        }
+
         let move_speed = 20.0 * delta_seconds;
         let rotation_speed = 2.0 * delta_seconds;
-
-        // Rotation
-        if pressed_keys.contains(&KeyCode::ArrowUp) {
-            self.camera_rot.x += rotation_speed;
-        }
-        if pressed_keys.contains(&KeyCode::ArrowDown) {
-            self.camera_rot.x -= rotation_speed;
-        }
-        if pressed_keys.contains(&KeyCode::ArrowLeft) {
-            self.camera_rot.y += rotation_speed;
-        }
-        if pressed_keys.contains(&KeyCode::ArrowRight) {
-            self.camera_rot.y -= rotation_speed;
-        }
-        // Clamp pitch
-        self.camera_rot.x = self.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
-
-        // Movement
         let (sin_y, cos_y) = self.camera_rot.y.sin_cos();
-        if pressed_keys.contains(&KeyCode::KeyW) {
-            self.camera_pos.x += cos_y * move_speed;
-            self.camera_pos.z += sin_y * move_speed;
+
+        match action {
+            ClientKeybindableActions::BreakBlock => {
+                unreachable!("Action not holdable");
+            }
+            ClientKeybindableActions::PlaceBlock => {
+                unreachable!("Action not holdable");
+            }
+            ClientKeybindableActions::MoveForwards => {
+                self.camera_pos.x += cos_y * move_speed;
+                self.camera_pos.z += sin_y * move_speed;
+            }
+            ClientKeybindableActions::MoveBackwards => {
+                self.camera_pos.x -= cos_y * move_speed;
+                self.camera_pos.z -= sin_y * move_speed;
+            }
+            ClientKeybindableActions::MoveLeft => {
+                self.camera_pos.x -= sin_y * move_speed;
+                self.camera_pos.z += cos_y * move_speed;
+            }
+            ClientKeybindableActions::MoveRight => {
+                self.camera_pos.x += sin_y * move_speed;
+                self.camera_pos.z -= cos_y * move_speed;
+            }
+            ClientKeybindableActions::MoveUp => {
+                self.camera_pos.y += move_speed;
+            }
+            ClientKeybindableActions::MoveDown => {
+                self.camera_pos.y -= move_speed;
+            }
+            ClientKeybindableActions::RotateUp => {
+                self.camera_rot.x += rotation_speed;
+            }
+            ClientKeybindableActions::RotateDown => {
+                self.camera_rot.x -= rotation_speed;
+            }
+            ClientKeybindableActions::RotateLeft => {
+                self.camera_rot.y += rotation_speed;
+            }
+            ClientKeybindableActions::RotateRight => {
+                self.camera_rot.y -= rotation_speed;
+            }
+            ClientKeybindableActions::RequestServerPlayerData => {
+                unreachable!("Action not holdable");
+            }
+            ClientKeybindableActions::RequestServerChunkInfo => {
+                unreachable!("Action not holdable");
+            }
         }
-        if pressed_keys.contains(&KeyCode::KeyS) {
-            self.camera_pos.x -= cos_y * move_speed;
-            self.camera_pos.z -= sin_y * move_speed;
-        }
-        if pressed_keys.contains(&KeyCode::KeyA) {
-            self.camera_pos.x -= sin_y * move_speed;
-            self.camera_pos.z += cos_y * move_speed;
-        }
-        if pressed_keys.contains(&KeyCode::KeyD) {
-            self.camera_pos.x += sin_y * move_speed;
-            self.camera_pos.z -= cos_y * move_speed;
-        }
-        if pressed_keys.contains(&KeyCode::Space) {
-            self.camera_pos.y += move_speed;
-        }
-        if pressed_keys.contains(&KeyCode::ShiftLeft) {
-            self.camera_pos.y -= move_speed;
-        }
+
+        // clamp pitch
+        self.camera_rot.x = self.camera_rot.x.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
     }
 }

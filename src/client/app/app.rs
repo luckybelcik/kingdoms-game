@@ -10,9 +10,18 @@ use winit::{
     window::{Theme, Window},
 };
 
-use crate::client::client::config::{
-    mesh_config::{MeshConfig, MeshFlags},
-    render_config::{RenderConfig, RenderFlags},
+use crate::client::{
+    app::{
+        app_actions::AppKeybindableActions,
+        input_handler::{ActionOption, InputHandler},
+    },
+    client::{
+        client_actions::ClientKeybindableActions,
+        config::{
+            mesh_config::{MeshConfig, MeshFlags},
+            render_config::{RenderConfig, RenderFlags},
+        },
+    },
 };
 
 use crate::client::{
@@ -28,9 +37,7 @@ use crate::client::{
     app::{appinfo::AppInfo, ui_state::UIState},
     rendering::{render_results::RenderResults, renderer::Renderer},
 };
-use crate::shared::communication::client_packet::{ClientAction, ClientPacket};
 use crate::shared::communication::player_id::PlayerId;
-use crate::shared::util::raycast::cast_ray;
 
 #[derive(Default)]
 pub struct App {
@@ -42,6 +49,8 @@ pub struct App {
     render_results: RenderResults,
     ui_state: UIState,
     client: Option<Client>,
+    input_handler: Option<InputHandler>,
+    scheduled_client_bindable_actions: Vec<ClientKeybindableActions>,
 }
 
 impl App {
@@ -55,6 +64,8 @@ impl App {
             render_results: Default::default(),
             ui_state: Default::default(),
             client: Some(Client::create(player_id, connection_type)),
+            input_handler: Some(InputHandler::new()),
+            scheduled_client_bindable_actions: Vec::new(),
         }
     }
 }
@@ -197,6 +208,28 @@ impl App {
         event: KeyEvent,
         event_loop: &winit::event_loop::ActiveEventLoop,
     ) {
+        if let PhysicalKey::Code(key_code) = event.physical_key
+            && event.state == ElementState::Pressed
+        {
+            if let Some(input_handler) = &self.input_handler {
+                let action = input_handler.handle_input(&key_code);
+
+                if action.is_single_press() {
+                    match action {
+                        ActionOption::App(app_action) => {
+                            self.handle_single_press_app_action(&app_action, &event_loop);
+                        }
+                        ActionOption::Client(client_action) => {
+                            if let Some(client) = &mut self.client {
+                                client.handle_single_press_client_action(&client_action);
+                            }
+                        }
+                        ActionOption::None => (),
+                    }
+                }
+            }
+        }
+
         if let PhysicalKey::Code(key_code) = event.physical_key {
             match event.state {
                 ElementState::Pressed => {
@@ -207,83 +240,25 @@ impl App {
                 }
             }
         }
-        if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
-            event_loop.exit();
-        }
-        if let PhysicalKey::Code(KeyCode::Comma) = event.physical_key
-            && event.state == ElementState::Pressed
-            && let Some(client) = &mut self.client
-            && let Some(raycast_result) =
-                cast_ray(client.camera_pos, client.camera_rot, &client.chunks, 64)
-            && let Some(chunk) = client.chunks.get_mut(&raycast_result.hit.0)
-        {
-            log::info!(
-                "Break block at {} {} {}",
-                raycast_result.hit.1.x,
-                raycast_result.hit.1.y,
-                raycast_result.hit.1.z
-            );
-            let mut new_client_chunk = (*(chunk.load_full())).clone();
-            new_client_chunk
-                .chunk
-                .set_block(raycast_result.hit.1, 0, &mut client.dirty_chunks);
-            chunk.store(Arc::new(new_client_chunk));
-        }
-        if let PhysicalKey::Code(KeyCode::Period) = event.physical_key
-            && event.state == ElementState::Pressed
-            && let Some(client) = &mut self.client
-            && let Some(raycast_result) =
-                cast_ray(client.camera_pos, client.camera_rot, &client.chunks, 64)
-            && let Some(chunk) = client.chunks.get_mut(&raycast_result.previous.0)
-        {
-            log::info!(
-                "Place block at {} {} {}",
-                raycast_result.previous.1.x,
-                raycast_result.previous.1.y,
-                raycast_result.previous.1.z
-            );
-            let mut new_client_chunk = (*(chunk.load_full())).clone();
-            new_client_chunk.chunk.set_block(
-                raycast_result.previous.1,
-                1,
-                &mut client.dirty_chunks,
-            );
-            chunk.store(Arc::new(new_client_chunk));
-        }
-        if let PhysicalKey::Code(KeyCode::KeyP) = event.physical_key
-            && event.state == ElementState::Pressed
-        {
-            PushConstantConfig::toggle(PushConstantFlags::RENDER_TEXTURES);
-        }
-        #[cfg(debug_assertions)]
-        if let PhysicalKey::Code(KeyCode::KeyL) = event.physical_key
-            && event.state == ElementState::Pressed
-        {
-            RenderConfig::toggle(RenderFlags::LINE_RENDERING);
-        }
-        if let PhysicalKey::Code(KeyCode::F3) = event.physical_key
-            && event.state == ElementState::Pressed
-        {
-            self.ui_state.show_ui = !self.ui_state.show_ui;
-        }
-        if let PhysicalKey::Code(KeyCode::KeyI) = event.physical_key
-            && event.state == ElementState::Pressed
-        {
-            if let Some(client) = &mut self.client {
-                client.send_packet(ClientPacket {
-                    player_id: client.get_player_id(),
-                    action: ClientAction::DebugPlayer,
-                });
+    }
+
+    fn handle_single_press_app_action(
+        &mut self,
+        action: &AppKeybindableActions,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+    ) {
+        match action {
+            AppKeybindableActions::ExitApp => {
+                event_loop.exit();
             }
-        }
-        if let PhysicalKey::Code(KeyCode::KeyU) = event.physical_key
-            && event.state == ElementState::Pressed
-        {
-            if let Some(client) = &mut self.client {
-                client.send_packet(ClientPacket {
-                    player_id: client.get_player_id(),
-                    action: ClientAction::DebugChunks,
-                });
+            AppKeybindableActions::ToggleTextureRendering => {
+                PushConstantConfig::toggle(PushConstantFlags::RENDER_TEXTURES);
+            }
+            AppKeybindableActions::ToggleLineRendering => {
+                RenderConfig::toggle(RenderFlags::LINE_RENDERING);
+            }
+            AppKeybindableActions::ToggleDebugUI => {
+                self.ui_state.show_ui = !self.ui_state.show_ui;
             }
         }
     }
@@ -308,6 +283,22 @@ impl App {
         const TICK_RATE: u32 = 60;
         const FIXED_TIMESTEP: f64 = 1.0 / TICK_RATE as f64;
 
+        for key_code in &self.pressed_keys {
+            if let Some(input_handler) = &self.input_handler {
+                let action = input_handler.handle_input(&key_code);
+
+                if action.is_holdable() {
+                    match action {
+                        ActionOption::App(_) => (),
+                        ActionOption::Client(client_action) => {
+                            self.scheduled_client_bindable_actions.push(client_action);
+                        }
+                        ActionOption::None => (),
+                    }
+                }
+            }
+        }
+
         let now = Instant::now();
         let delta_time = now - self.app_info.last_render_time.unwrap();
 
@@ -316,17 +307,19 @@ impl App {
 
         while accumulator >= FIXED_TIMESTEP {
             if let Some(client) = &mut self.client {
-                client.handle_client_tick(&mut self.app_info, FIXED_TIMESTEP as f32);
+                client.handle_client_tick(
+                    &mut self.app_info,
+                    &mut self.scheduled_client_bindable_actions,
+                    FIXED_TIMESTEP as f32,
+                );
+
+                self.scheduled_client_bindable_actions.clear();
             }
             accumulator -= FIXED_TIMESTEP;
         }
 
         self.app_info.accumulator = accumulator;
         self.app_info.last_render_time = Some(now);
-
-        if let Some(client) = &mut self.client {
-            client.update_camera(delta_time.as_secs_f32(), &mut self.pressed_keys);
-        }
 
         let gui_input;
         {

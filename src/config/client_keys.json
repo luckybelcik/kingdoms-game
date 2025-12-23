@@ -1,0 +1,16 @@
+{
+  "Comma": "BreakBlock",
+  "Period": "PlaceBlock",
+  "KeyW": "MoveForwards",
+  "KeyS": "MoveBackwards",
+  "KeyA": "MoveLeft",
+  "KeyD": "MoveRight",
+  "Space": "MoveUp",
+  "ShiftLeft": "MoveDown",
+  "ArrowUp": "RotateUp",
+  "ArrowDown": "RotateDown",
+  "ArrowLeft": "RotateLeft",
+  "ArrowRight": "RotateRight",
+  "KeyI": "RequestServerPlayerData",
+  "KeyU": "RequestServerChunkInfo"
+}
