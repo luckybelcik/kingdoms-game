@@ -59,11 +59,23 @@ impl Client {
         self.player_id.clone()
     }
 
+    pub fn handle_tickless_actions(
+        &mut self,
+        scheduled_actions: &mut Vec<ClientKeybindableActions>,
+        delta_time: f32,
+    ) {
+        for action in scheduled_actions {
+            if action.is_tickrate_independent() {
+                self.handle_holdable_client_action(action, delta_time);
+            }
+        }
+    }
+
     pub fn handle_client_tick(
         &mut self,
         app_info: &mut AppInfo,
         scheduled_actions: &mut Vec<ClientKeybindableActions>,
-        delta_seconds: f32,
+        delta_time: f32,
     ) {
         app_info.chunk_count = self.chunks.len() as u64;
 
@@ -75,7 +87,9 @@ impl Client {
         let mut packets = Vec::new();
 
         for action in scheduled_actions {
-            self.handle_holdable_client_action(action, delta_seconds);
+            if !action.is_tickrate_independent() {
+                self.handle_holdable_client_action(action, delta_time);
+            }
         }
 
         match &self.connection_type {
@@ -259,8 +273,8 @@ impl Client {
             return;
         }
 
-        let move_speed = 20.0 * delta_seconds;
-        let rotation_speed = 2.0 * delta_seconds;
+        let move_speed = 10.0 * delta_seconds;
+        let rotation_speed = 1.0 * delta_seconds;
         let (sin_y, cos_y) = self.camera_rot.y.sin_cos();
 
         match action {

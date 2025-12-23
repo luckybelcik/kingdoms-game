@@ -280,7 +280,7 @@ impl App {
     }
 
     fn handle_redraw(&mut self, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
-        const TICK_RATE: u32 = 60;
+        const TICK_RATE: u32 = 20;
         const FIXED_TIMESTEP: f64 = 1.0 / TICK_RATE as f64;
 
         for key_code in &self.pressed_keys {
@@ -301,6 +301,13 @@ impl App {
 
         let now = Instant::now();
         let delta_time = now - self.app_info.last_render_time.unwrap();
+
+        if let Some(client) = &mut self.client {
+            client.handle_tickless_actions(
+                &mut self.scheduled_client_bindable_actions,
+                delta_time.as_secs_f32(),
+            );
+        }
 
         let mut accumulator = self.app_info.accumulator;
         accumulator += delta_time.as_secs_f64();

@@ -41,4 +41,23 @@ impl ClientKeybindableActions {
     pub fn is_holdable(&self) -> bool {
         !self.is_single_press()
     }
+
+    pub fn is_tickrate_independent(&self) -> bool {
+        match self {
+            Self::BreakBlock => false,
+            Self::PlaceBlock => false,
+            Self::MoveForwards => false,
+            Self::MoveBackwards => false,
+            Self::MoveLeft => false,
+            Self::MoveRight => false,
+            Self::MoveUp => false,
+            Self::MoveDown => false,
+            Self::RotateUp => true,
+            Self::RotateDown => true,
+            Self::RotateLeft => true,
+            Self::RotateRight => true,
+            Self::RequestServerChunkInfo => false,
+            Self::RequestServerPlayerData => false,
+        }
+    }
 }
