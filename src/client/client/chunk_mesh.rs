@@ -1,11 +1,9 @@
 use std::sync::Arc;
 
 use crate::{
-    client::client::{
-        client_chunk::ClientChunk,
-        config::mesh_config::{MeshConfig, MeshFlags},
-    },
+    client::client::config::mesh_config::{MeshConfig, MeshFlags},
     shared::{
+        chunk::Chunk,
         constants::{CHUNK_POS_BITS, CHUNK_SIZE, ChunkBitRow},
         coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
         render::{chunk_draw_call_info::ChunkDrawCallInfo, vertex::Vertex},
@@ -21,7 +19,7 @@ pub struct SendableChunkMesh {
     pub pos: ChunkPos,
 }
 
-pub type MeshJob = (Arc<ClientChunk>, [Option<Arc<ClientChunk>>; 6]);
+pub type MeshJob = (Arc<Chunk>, [Option<Arc<Chunk>>; 6]);
 
 impl SendableChunkMesh {
     pub fn make_mesh(job: &MeshJob) -> SendableChunkMesh {
@@ -46,37 +44,37 @@ impl SendableChunkMesh {
         let neighbor_back = &job.1[5];
 
         let right_mask = if let Some(n_right) = neighbor_right {
-            &n_right.chunk.xz_swap_chunk_mask
+            &n_right.xz_swap_chunk_mask
         } else {
             &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let left_mask = if let Some(n_left) = neighbor_left {
-            &n_left.chunk.xz_swap_chunk_mask
+            &n_left.xz_swap_chunk_mask
         } else {
             &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let top_mask = if let Some(n_top) = neighbor_up {
-            &n_top.chunk.chunk_mask
+            &n_top.chunk_mask
         } else {
             &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let bottom_mask = if let Some(n_bottom) = neighbor_down {
-            &n_bottom.chunk.chunk_mask
+            &n_bottom.chunk_mask
         } else {
             &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let front_mask = if let Some(n_front) = neighbor_front {
-            &n_front.chunk.chunk_mask
+            &n_front.chunk_mask
         } else {
             &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
         let back_mask = if let Some(n_back) = neighbor_back {
-            &n_back.chunk.chunk_mask
+            &n_back.chunk_mask
         } else {
             &vec![0; CHUNK_SIZE * CHUNK_SIZE]
         };
 
-        let client_chunk = &job.0;
+        let chunk = &job.0;
 
         let mut xp_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
         let mut xm_faces: [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] = [0; CHUNK_SIZE * CHUNK_SIZE];
@@ -89,27 +87,27 @@ impl SendableChunkMesh {
             for z in 0..CHUNK_SIZE {
                 let i_curr = y + z * CHUNK_SIZE;
 
-                let current_swap_slice = client_chunk.chunk.xz_swap_chunk_mask[y + z * CHUNK_SIZE];
+                let current_swap_slice = chunk.xz_swap_chunk_mask[y + z * CHUNK_SIZE];
 
                 let xminus_neighbor_row = if z < CHUNK_SIZE - 1 {
-                    client_chunk.chunk.xz_swap_chunk_mask[y + (z + 1) * CHUNK_SIZE]
+                    chunk.xz_swap_chunk_mask[y + (z + 1) * CHUNK_SIZE]
                 } else {
                     right_mask[y + 0 * CHUNK_SIZE]
                 };
                 let xminus = current_swap_slice & !xminus_neighbor_row;
 
                 let xplus_neighbor_row = if z > 0 {
-                    client_chunk.chunk.xz_swap_chunk_mask[y + (z - 1) * CHUNK_SIZE]
+                    chunk.xz_swap_chunk_mask[y + (z - 1) * CHUNK_SIZE]
                 } else {
                     left_mask[y + (CHUNK_SIZE - 1) * CHUNK_SIZE]
                 };
                 let xplus = current_swap_slice & !xplus_neighbor_row;
 
-                let current_slice = client_chunk.chunk.chunk_mask[i_curr];
+                let current_slice = chunk.chunk_mask[i_curr];
 
                 let yplus;
                 if y < CHUNK_SIZE - 1 {
-                    let upslice = client_chunk.chunk.chunk_mask[(y + 1) + z * CHUNK_SIZE];
+                    let upslice = chunk.chunk_mask[(y + 1) + z * CHUNK_SIZE];
                     yplus = current_slice & !upslice;
                 } else {
                     yplus = current_slice & !top_mask[z * CHUNK_SIZE];
@@ -117,7 +115,7 @@ impl SendableChunkMesh {
 
                 let yminus;
                 if y != 0 {
-                    let downslice = client_chunk.chunk.chunk_mask[(y - 1) + z * CHUNK_SIZE];
+                    let downslice = chunk.chunk_mask[(y - 1) + z * CHUNK_SIZE];
                     yminus = current_slice & !downslice;
                 } else {
                     yminus = current_slice & !bottom_mask[CHUNK_SIZE - 1 + z * CHUNK_SIZE];
@@ -125,7 +123,7 @@ impl SendableChunkMesh {
 
                 let zplus;
                 if z < CHUNK_SIZE - 1 {
-                    let front_slice = client_chunk.chunk.chunk_mask[y + (z + 1) * CHUNK_SIZE];
+                    let front_slice = chunk.chunk_mask[y + (z + 1) * CHUNK_SIZE];
                     zplus = current_slice & !front_slice;
                 } else {
                     zplus = current_slice & !front_mask[y];
@@ -133,7 +131,7 @@ impl SendableChunkMesh {
 
                 let zminus;
                 if z > 0 {
-                    let back_slice = client_chunk.chunk.chunk_mask[y + (z - 1) * CHUNK_SIZE];
+                    let back_slice = chunk.chunk_mask[y + (z - 1) * CHUNK_SIZE];
                     zminus = current_slice & !back_slice;
                 } else {
                     zminus = current_slice & !back_mask[y + CHUNK_SIZE - 1];
@@ -268,7 +266,7 @@ impl SendableChunkMesh {
         SendableChunkMesh {
             data,
             lens: face_amounts,
-            pos: client_chunk.chunk.get_chunk_pos(),
+            pos: chunk.get_chunk_pos(),
         }
     }
 }

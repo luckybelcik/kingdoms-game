@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
 
 use arc_swap::ArcSwap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::shared::{
     constants::{CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow},
@@ -86,7 +86,7 @@ impl Chunk {
         &mut self,
         pos: ChunkRelative,
         block: u16,
-        dirty_chunks: &mut HashSet<ChunkPos>,
+        dirty_chunks: &mut FxHashSet<ChunkPos>,
     ) {
         if pos.x < CHUNK_SIZE as u8 || pos.y < CHUNK_SIZE as u8 || pos.z < CHUNK_SIZE as u8 {
             self.blocks[pos.to_array_index()] = block;
@@ -135,7 +135,7 @@ impl Chunk {
     }
 }
 
-impl WorldInspector for HashMap<ChunkPos, ArcSwap<Chunk>> {
+impl WorldInspector for FxHashMap<ChunkPos, ArcSwap<Chunk>> {
     fn get_block_id(&self, chunk_pos: ChunkPos, rel_pos: ChunkRelative) -> u16 {
         self.get(&chunk_pos)
             .map(|c| c.load().get_block(rel_pos))

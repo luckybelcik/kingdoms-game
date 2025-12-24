@@ -1,19 +1,16 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{
-        Arc,
-        mpsc::{Receiver, Sender},
-    },
+use std::sync::{
+    Arc,
+    mpsc::{Receiver, Sender},
 };
 
-use arc_swap::ArcSwap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     client::client::{
         chunk_mesh::{MeshJob, SendableChunkMesh},
         client_chunk::ClientChunk,
     },
-    shared::coordinate_systems::chunk_pos::ChunkPos,
+    shared::{chunk::Chunk, coordinate_systems::chunk_pos::ChunkPos},
 };
 
 pub struct Mesher {
@@ -51,11 +48,11 @@ impl Mesher {
 
     pub fn upload_for_remeshing(
         &self,
-        dirty_keys: &mut HashSet<ChunkPos>,
-        chunks: &mut HashMap<ChunkPos, ArcSwap<ClientChunk>>,
+        dirty_keys: &mut FxHashSet<ChunkPos>,
+        chunks: &mut FxHashMap<ChunkPos, ClientChunk>,
     ) {
         for key in dirty_keys.iter() {
-            if let Some(chunk) = chunks.get(key) {
+            if let Some(client_chunk) = chunks.get(key) {
                 let chunk_pos_right = ChunkPos::new(key.x + 1, key.y, key.z);
                 let chunk_pos_left = ChunkPos::new(key.x - 1, key.y, key.z);
                 let chunk_pos_up = ChunkPos::new(key.x, key.y + 1, key.z);
@@ -63,16 +60,16 @@ impl Mesher {
                 let chunk_pos_forward = ChunkPos::new(key.x, key.y, key.z + 1);
                 let chunk_pos_backward = ChunkPos::new(key.x, key.y, key.z - 1);
 
-                let nearby_chunks: [Option<Arc<ClientChunk>>; 6] = [
-                    chunks.get(&chunk_pos_right).map(|c| c.load_full()),
-                    chunks.get(&chunk_pos_left).map(|c| c.load_full()),
-                    chunks.get(&chunk_pos_up).map(|c| c.load_full()),
-                    chunks.get(&chunk_pos_down).map(|c| c.load_full()),
-                    chunks.get(&chunk_pos_forward).map(|c| c.load_full()),
-                    chunks.get(&chunk_pos_backward).map(|c| c.load_full()),
+                let nearby_chunks: [Option<Arc<Chunk>>; 6] = [
+                    chunks.get(&chunk_pos_right).map(|c| c.chunk.load_full()),
+                    chunks.get(&chunk_pos_left).map(|c| c.chunk.load_full()),
+                    chunks.get(&chunk_pos_up).map(|c| c.chunk.load_full()),
+                    chunks.get(&chunk_pos_down).map(|c| c.chunk.load_full()),
+                    chunks.get(&chunk_pos_forward).map(|c| c.chunk.load_full()),
+                    chunks.get(&chunk_pos_backward).map(|c| c.chunk.load_full()),
                 ];
 
-                let loaded_chunk = chunk.load_full();
+                let loaded_chunk = client_chunk.chunk.load_full();
 
                 self.job_sender.send((loaded_chunk, nearby_chunks)).unwrap();
             }

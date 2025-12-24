@@ -88,22 +88,19 @@ impl Scene {
                 aspect_ratio,
             );
 
-            for chunk in client.chunks.values() {
-                let loaded_client_chunk = chunk.load();
-                let mut draw_calls = loaded_client_chunk.mesh.get_draw_calls();
-                let culled_calls = loaded_client_chunk.mesh.get_visible_draw_calls(
-                    client.camera_pos,
-                    loaded_client_chunk.chunk.get_chunk_pos(),
-                );
+            for client_chunk in client.chunks.values() {
+                let chunk = client_chunk.chunk.load();
+                let mesh = client_chunk.mesh.load();
+
+                let mut draw_calls = mesh.get_draw_calls();
+                let culled_calls =
+                    mesh.get_visible_draw_calls(client.camera_pos, chunk.get_chunk_pos());
 
                 if culled_calls.is_empty() {
                     continue;
                 }
 
-                PushConstants::update_chunk_pos(
-                    renderpass,
-                    loaded_client_chunk.chunk.get_chunk_pos(),
-                );
+                PushConstants::update_chunk_pos(renderpass, chunk.get_chunk_pos());
 
                 if RenderConfig::get(RenderFlags::CULL_FACES) {
                     draw_calls = &culled_calls;

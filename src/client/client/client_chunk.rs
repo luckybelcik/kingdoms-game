@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::sync::Arc;
 
 use arc_swap::ArcSwap;
+use rustc_hash::FxHashMap;
 
 use crate::{
     client::client::chunk_mesh::StoredChunkMesh,
@@ -11,22 +12,24 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
 pub struct ClientChunk {
-    pub chunk: Chunk,
-    pub mesh: StoredChunkMesh,
+    pub chunk: ArcSwap<Chunk>,
+    pub mesh: ArcSwap<StoredChunkMesh>,
 }
 
 impl ClientChunk {
     pub fn new(chunk: Chunk, mesh: StoredChunkMesh) -> Self {
-        Self { chunk, mesh }
+        Self {
+            chunk: ArcSwap::new(Arc::new(chunk)),
+            mesh: ArcSwap::new(Arc::new(mesh)),
+        }
     }
 }
 
-impl WorldInspector for HashMap<ChunkPos, ArcSwap<ClientChunk>> {
+impl WorldInspector for FxHashMap<ChunkPos, ClientChunk> {
     fn get_block_id(&self, chunk_pos: ChunkPos, rel_pos: ChunkRelative) -> u16 {
         self.get(&chunk_pos)
-            .map(|c| c.load().chunk.get_block(rel_pos))
+            .map(|c| c.chunk.load().get_block(rel_pos))
             .unwrap_or(0)
     }
 }

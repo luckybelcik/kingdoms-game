@@ -1,8 +1,9 @@
 use std::{
-    collections::HashSet,
     sync::mpsc::{Receiver, Sender},
     time::Instant,
 };
+
+use rustc_hash::FxHashSet;
 
 use crate::shared::{
     communication::{client_packet::ClientPacket, server_packet::ServerPacket},
@@ -15,8 +16,8 @@ pub struct PlayerData {
     pub name: String,
     pub position: EntityPos,
     pub chunk_tick_position: ChunkPos,
-    pub visible_chunks: HashSet<ChunkPos>,
-    pub chunks_awaiting_generation: HashSet<ChunkPos>,
+    pub visible_chunks: FxHashSet<ChunkPos>,
+    pub chunks_awaiting_generation: FxHashSet<ChunkPos>,
     pub connection_type: ConnectionType,
     pub last_ping: Instant,
     pub render_distance: u8,

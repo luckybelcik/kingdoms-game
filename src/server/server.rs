@@ -1,5 +1,5 @@
 use std::{
-    collections::{BinaryHeap, HashMap, HashSet, VecDeque},
+    collections::{BinaryHeap, HashMap, VecDeque},
     sync::{
         Arc, Condvar, Mutex,
         mpsc::{Receiver, Sender},
@@ -9,6 +9,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use nalgebra_glm::{IVec3, distance};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     client::client::client_actions::PlayerActions,
@@ -30,9 +31,9 @@ pub type ChunkgenJob = ChunkPos;
 pub type GeneratedChunk = (ChunkPos, Chunk);
 
 pub struct Server {
-    pub chunks: HashMap<ChunkPos, ArcSwap<Chunk>>,
-    pub dirty_chunks: HashSet<ChunkPos>,
-    pub generating_chunks: HashSet<ChunkPos>,
+    pub chunks: FxHashMap<ChunkPos, ArcSwap<Chunk>>,
+    pub dirty_chunks: FxHashSet<ChunkPos>,
+    pub generating_chunks: FxHashSet<ChunkPos>,
     pub players: HashMap<PlayerId, PlayerData>,
     pub new_chunk_queues: HashMap<PlayerId, VecDeque<ServerPacket>>,
     pub tick: u128,
@@ -74,9 +75,9 @@ impl Server {
             .unwrap();
 
         Self {
-            chunks: HashMap::new(),
-            dirty_chunks: HashSet::new(),
-            generating_chunks: HashSet::new(),
+            chunks: FxHashMap::default(),
+            dirty_chunks: FxHashSet::default(),
+            generating_chunks: FxHashSet::default(),
             players: HashMap::new(),
             new_chunk_queues: HashMap::new(),
             tick: 0,
@@ -138,8 +139,8 @@ impl Server {
             name: "Local".to_string(),
             position: EntityPos::new(0.0, 0.0, 0.0),
             chunk_tick_position: ChunkPos::new(0, 500, 0),
-            visible_chunks: HashSet::new(),
-            chunks_awaiting_generation: HashSet::new(),
+            visible_chunks: FxHashSet::default(),
+            chunks_awaiting_generation: FxHashSet::default(),
             connection_type: ConnectionType::Local(server_sender, client_receiver),
             last_ping: Instant::now(),
             render_distance: 6,
@@ -328,7 +329,7 @@ impl Server {
 
     /// Returns true if chunk was sent, returns false if chunk was scheduled for generation
     fn load_chunk(
-        chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
+        chunks: &mut FxHashMap<ChunkPos, ArcSwap<Chunk>>,
         new_chunk_queues: &mut HashMap<PlayerId, VecDeque<ServerPacket>>,
         job_queue: &Arc<(Mutex<BinaryHeap<PrioritizedJob>>, Condvar)>,
         player_id: &PlayerId,
@@ -348,8 +349,8 @@ impl Server {
     }
 
     fn unload_chunk(
-        chunks: &mut HashMap<ChunkPos, ArcSwap<Chunk>>,
-        dirty_chunks: &mut HashSet<ChunkPos>,
+        chunks: &mut FxHashMap<ChunkPos, ArcSwap<Chunk>>,
+        dirty_chunks: &mut FxHashSet<ChunkPos>,
         chunk_pos: &ChunkPos,
     ) {
         if chunks.contains_key(chunk_pos) {
@@ -437,8 +438,8 @@ impl Server {
     }
 }
 
-pub fn get_chunks_in_radius(player_chunk_pos: ChunkPos, radius: u8) -> HashSet<ChunkPos> {
-    let mut nearby_chunks = HashSet::new();
+pub fn get_chunks_in_radius(player_chunk_pos: ChunkPos, radius: u8) -> FxHashSet<ChunkPos> {
+    let mut nearby_chunks = FxHashSet::default();
     let radius = radius as i32;
     let radius_sq = (radius * radius) as f32;
 

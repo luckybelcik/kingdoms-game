@@ -19,21 +19,17 @@ use crate::{
         util::raycast::cast_ray,
     },
 };
-use std::{
-    collections::{HashMap, HashSet},
-    f32::consts::PI,
-    sync::Arc,
-};
+use std::{f32::consts::PI, sync::Arc};
 
-use arc_swap::ArcSwap;
 use nalgebra_glm::{Vec3, vec3};
+use rustc_hash::{FxHashMap, FxHashSet};
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
 use crate::{client::client::mesher::Mesher, shared::coordinate_systems::chunk_pos::ChunkPos};
 
 pub struct Client {
-    pub chunks: HashMap<ChunkPos, ArcSwap<ClientChunk>>,
-    pub dirty_chunks: HashSet<ChunkPos>,
+    pub chunks: FxHashMap<ChunkPos, ClientChunk>,
+    pub dirty_chunks: FxHashSet<ChunkPos>,
     mesher: Mesher,
     pub camera_pos: EntityPos,
     pub camera_rot: Vec3,
@@ -45,8 +41,8 @@ pub struct Client {
 impl Client {
     pub fn create(player_id: PlayerId, connection_type: ClientConnectionType) -> Self {
         Client {
-            chunks: HashMap::new(),
-            dirty_chunks: HashSet::new(),
+            chunks: FxHashMap::default(),
+            dirty_chunks: FxHashSet::default(),
             mesher: Mesher::create(),
             camera_pos: EntityPos::new(0.0, 0.0, 0.0),
             camera_rot: vec3(0.0, 0.0, 0.0),
@@ -116,10 +112,11 @@ impl Client {
         let meshes = self.mesher.receive_from_remeshing();
 
         for mesh in meshes {
-            if let Some(chunk) = self.chunks.get(&mesh.pos) {
-                let mut new_client_chunk = (*(chunk.load_full())).clone();
-                new_client_chunk.mesh.update_mesh(queue, allocator, &mesh);
-                chunk.store(Arc::new(new_client_chunk));
+            if let Some(client_chunk) = self.chunks.get(&mesh.pos) {
+                let arc_mesh = client_chunk.mesh.load_full();
+                let mut new_mesh = (*arc_mesh).clone();
+                new_mesh.update_mesh(queue, allocator, &mesh);
+                client_chunk.mesh.store(Arc::new(new_mesh));
             }
         }
     }
@@ -132,10 +129,7 @@ impl Client {
             ServerPacket::Chunk(chunk) => {
                 let mesh = StoredChunkMesh::new_empty();
                 let pos = chunk.get_chunk_pos();
-                let client_chunk = ArcSwap::new(Arc::new(ClientChunk::new(
-                    Arc::unwrap_or_clone(chunk),
-                    mesh,
-                )));
+                let client_chunk = ClientChunk::new(Arc::unwrap_or_clone(chunk), mesh);
                 self.chunks.insert(pos, client_chunk);
                 self.dirty_chunks.insert(pos);
                 self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
@@ -201,14 +195,12 @@ impl Client {
                 if let Some(raycast_result) =
                     cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
                 {
-                    if let Some(chunk) = self.chunks.get_mut(&raycast_result.hit.0) {
-                        let mut new_client_chunk = (*(chunk.load_full())).clone();
-                        new_client_chunk.chunk.set_block(
-                            raycast_result.hit.1,
-                            0,
-                            &mut self.dirty_chunks,
-                        );
-                        chunk.store(Arc::new(new_client_chunk));
+                    if let Some(client_chunk) = self.chunks.get_mut(&raycast_result.hit.0) {
+                        client_chunk.chunk.rcu(|old_chunk| {
+                            let mut new_chunk = (**old_chunk).clone();
+                            new_chunk.set_block(raycast_result.hit.1, 0, &mut self.dirty_chunks);
+                            Arc::new(new_chunk)
+                        });
                     }
                 }
             }
@@ -223,14 +215,16 @@ impl Client {
                 if let Some(raycast_result) =
                     cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
                 {
-                    if let Some(chunk) = self.chunks.get_mut(&raycast_result.previous.0) {
-                        let mut new_client_chunk = (*(chunk.load_full())).clone();
-                        new_client_chunk.chunk.set_block(
-                            raycast_result.previous.1,
-                            1,
-                            &mut self.dirty_chunks,
-                        );
-                        chunk.store(Arc::new(new_client_chunk));
+                    if let Some(client_chunk) = self.chunks.get_mut(&raycast_result.previous.0) {
+                        client_chunk.chunk.rcu(|old_chunk| {
+                            let mut new_chunk = (**old_chunk).clone();
+                            new_chunk.set_block(
+                                raycast_result.previous.1,
+                                1,
+                                &mut self.dirty_chunks,
+                            );
+                            Arc::new(new_chunk)
+                        });
                     }
                 }
             }
