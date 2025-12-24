@@ -257,8 +257,12 @@ impl Server {
     pub fn load_chunks(&mut self) {
         for (player_id, player_data) in self.players.iter_mut() {
             let player_chunk_pos = player_data.position.to_block_pos().to_chunk_pos();
+
+            let load_new_chunks = self.tick.is_multiple_of(19) // only 1 update per 20 ticks
+                && player_chunk_pos
+                    != player_data.chunk_tick_position;
             // If player chunk pos changed, load new chunks
-            if player_chunk_pos != player_data.chunk_tick_position {
+            if load_new_chunks {
                 let current_nearby_chunks =
                     get_chunks_in_radius(player_chunk_pos, player_data.render_distance);
                 let old_nearby_chunks = get_chunks_in_radius(
@@ -323,7 +327,10 @@ impl Server {
                 let _ = player_data.chunks_awaiting_generation.remove(&pos);
             }
 
-            player_data.chunk_tick_position = player_data.position.to_block_pos().to_chunk_pos();
+            if self.tick.is_multiple_of(19) {
+                player_data.chunk_tick_position =
+                    player_data.position.to_block_pos().to_chunk_pos();
+            }
         }
     }
 
