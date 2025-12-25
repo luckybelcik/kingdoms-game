@@ -5,6 +5,7 @@ use crate::{
             chunk_mesh::StoredChunkMesh,
             client_actions::{ClientKeybindableActions, PlayerActions},
             client_chunk::ClientChunk,
+            packet_serializer::PacketSerializer,
         },
         connection_details::ClientConnectionType,
     },
@@ -32,6 +33,7 @@ pub struct Client {
     pub chunks: FxHashMap<ChunkPos, ClientChunk>,
     pub dirty_chunks: FxHashSet<ChunkPos>,
     mesher: Mesher,
+    serializer: PacketSerializer,
     pub camera_pos: EntityPos,
     pub camera_rot: Vec3,
     player_data: Option<ClientPlayerData>,
@@ -45,6 +47,7 @@ impl Client {
             chunks: FxHashMap::default(),
             dirty_chunks: FxHashSet::default(),
             mesher: Mesher::create(),
+            serializer: PacketSerializer::create(),
             camera_pos: EntityPos::new(0.0, 0.0, 0.0),
             camera_rot: vec3(0.0, 0.0, 0.0),
             player_data: None,
@@ -102,8 +105,11 @@ impl Client {
         }
 
         for packet in packets {
-            let decoded = bincode::deserialize(&packet).unwrap();
-            Self::receive_packet(self, decoded);
+            self.serializer.deserialize_server_packet_bytes(packet);
+        }
+
+        for deserialized in self.serializer.receive_finished_tasks() {
+            self.receive_packet(deserialized);
         }
 
         self.mesher

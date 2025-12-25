@@ -397,8 +397,21 @@ impl Server {
             if let Some(player_data) = self.players.get(player_id) {
                 let first_packets = queue.drain(0..std::cmp::min(MAX_NEW_CHUNK_COUNT, queue.len()));
 
-                for packet in first_packets {
-                    Self::send_packet(player_data, packet);
+                if let ConnectionType::Local(sender, _) = &player_data.connection_type {
+                    for packet in first_packets {
+                        let sender_clone = sender.clone();
+
+                        rayon::spawn(move || {
+                            let bytes = bincode::serialize(&packet).unwrap();
+                            let result = sender_clone.send(bytes);
+
+                            if let Err(error) = result {
+                                eprintln!("Error sending packet: {}", error);
+                            }
+                        });
+                    }
+                } else {
+                    unimplemented!("we dont do remote connections yet, so sowwy!");
                 }
             }
         }
