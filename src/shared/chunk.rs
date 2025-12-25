@@ -1,6 +1,6 @@
-
 use arc_swap::ArcSwap;
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::{Deserialize, Serialize};
 
 use crate::shared::{
     constants::{CHUNK_SIZE, CHUNK_VOLUME, ChunkBitRow},
@@ -8,7 +8,7 @@ use crate::shared::{
     traits::world_inspector::WorldInspector,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Chunk {
     chunk_pos: ChunkPos,
     blocks: Vec<u16>,

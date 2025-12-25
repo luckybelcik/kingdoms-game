@@ -4,11 +4,9 @@ use std::{
 };
 
 use rustc_hash::FxHashSet;
+use serde::{Deserialize, Serialize};
 
-use crate::shared::{
-    communication::{client_packet::ClientPacket, server_packet::ServerPacket},
-    coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos},
-};
+use crate::shared::coordinate_systems::{chunk_pos::ChunkPos, entity_pos::EntityPos};
 
 #[derive(Debug)]
 pub struct PlayerData {
@@ -33,7 +31,6 @@ impl PlayerData {
                 ConnectionType::Local(_, _) => SendableConnectionType::Local,
                 ConnectionType::Remote => SendableConnectionType::Remote,
             },
-            last_ping: self.last_ping,
             render_distance: self.render_distance,
         }
     }
@@ -48,7 +45,7 @@ impl PlayerData {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClientPlayerData {
     pub player_permissions: PlayerPermissions,
     pub name: String,
@@ -87,27 +84,26 @@ impl ClientPlayerData {
 
 #[derive(Debug)]
 pub enum ConnectionType {
-    Local(Sender<ServerPacket>, Receiver<ClientPacket>),
+    Local(Sender<Vec<u8>>, Receiver<Vec<u8>>),
     Remote,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SendableConnectionType {
     Local,
     Remote,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendablePlayerData {
     pub name: String,
     pub position: EntityPos,
     pub chunk_tick_position: ChunkPos,
     pub connection_type: SendableConnectionType,
-    pub last_ping: Instant,
     pub render_distance: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum PlayerPermissions {
     None = 0,   // basically no permissions
     Helper = 1, // non-destructive permissions

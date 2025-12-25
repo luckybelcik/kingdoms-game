@@ -9,9 +9,7 @@ use crate::{
         connection_details::{ClientConnectionType, LocalConnectionDetails},
     },
     server::server::Server,
-    shared::communication::{
-        client_packet::ClientPacket, player_id::PlayerId, server_packet::ServerPacket,
-    },
+    shared::communication::player_id::PlayerId,
 };
 
 pub mod client;
@@ -26,8 +24,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(not(target_os = "linux"))]
         let event_loop = winit::event_loop::EventLoop::builder().build()?;
 
-        let (server_sender, server_receiver) = std::sync::mpsc::channel::<ServerPacket>();
-        let (client_sender, client_receiver) = std::sync::mpsc::channel::<ClientPacket>();
+        let (server_sender, server_receiver) = std::sync::mpsc::channel::<Vec<u8>>();
+        let (client_sender, client_receiver) = std::sync::mpsc::channel::<Vec<u8>>();
 
         let player_id = PlayerId::new();
         let player_id_clone = player_id.clone();

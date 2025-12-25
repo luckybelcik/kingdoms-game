@@ -21,6 +21,7 @@ use crate::{
 };
 use std::{f32::consts::PI, sync::Arc};
 
+use arc_swap::ArcSwap;
 use nalgebra_glm::{Vec3, vec3};
 use rustc_hash::{FxHashMap, FxHashSet};
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
@@ -101,7 +102,8 @@ impl Client {
         }
 
         for packet in packets {
-            Self::receive_packet(self, packet);
+            let decoded = bincode::deserialize(&packet).unwrap();
+            Self::receive_packet(self, decoded);
         }
 
         self.mesher
@@ -129,7 +131,10 @@ impl Client {
             ServerPacket::Chunk(chunk) => {
                 let mesh = StoredChunkMesh::new_empty();
                 let pos = chunk.get_chunk_pos();
-                let client_chunk = ClientChunk::new(Arc::unwrap_or_clone(chunk), mesh);
+                let client_chunk = ClientChunk::new_prewrapped(
+                    ArcSwap::new(Arc::from(chunk)),
+                    ArcSwap::new(Arc::new(mesh)),
+                );
                 self.chunks.insert(pos, client_chunk);
                 self.dirty_chunks.insert(pos);
                 self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
@@ -166,7 +171,10 @@ impl Client {
     pub fn send_packet(&mut self, client_packet: ClientPacket) {
         match &self.connection_type {
             ClientConnectionType::Local(details) => {
-                details.client_packet_sender.send(client_packet).unwrap();
+                details
+                    .client_packet_sender
+                    .send(bincode::serialize(&client_packet).unwrap())
+                    .unwrap();
             }
             ClientConnectionType::Remote(_) => {
                 unimplemented!(

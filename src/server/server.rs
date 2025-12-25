@@ -13,7 +13,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     client::client::client_actions::PlayerActions,
-    server::prioritized_job::PrioritizedJob,
+    server::{
+        constants::{MAX_ACCEPTABLE_POSITION_DELTA, MAX_NEW_CHUNK_COUNT, MOVE_SPEED, TICK_RATE},
+        prioritized_job::PrioritizedJob,
+    },
     shared::{
         chunk::Chunk,
         communication::{
@@ -87,7 +90,6 @@ impl Server {
     }
 
     pub fn run_tick_loop(&mut self) {
-        const TICK_RATE: u32 = 20;
         let tick_duration: Duration = Duration::from_secs_f64(1.0 / TICK_RATE as f64);
 
         loop {
@@ -111,7 +113,8 @@ impl Server {
             }
 
             for packet in packets {
-                self.handle_client_packet(packet);
+                let decoded = bincode::deserialize(&packet).unwrap();
+                self.handle_client_packet(decoded);
             }
 
             self.receive_chunk_from_generation();
@@ -131,8 +134,8 @@ impl Server {
     pub fn add_local_player(
         &mut self,
         player_id: PlayerId,
-        server_sender: Sender<ServerPacket>,
-        client_receiver: Receiver<ClientPacket>,
+        server_sender: Sender<Vec<u8>>,
+        client_receiver: Receiver<Vec<u8>>,
     ) {
         let player_data = PlayerData {
             player_permissions: PlayerPermissions::Admin,
@@ -154,11 +157,6 @@ impl Server {
     }
 
     pub fn handle_client_packet(&mut self, client_packet: ClientPacket) {
-        const TICK_RATE: u32 = 20;
-        const FIXED_TIMESTEP: f32 = 1.0 / TICK_RATE as f32;
-
-        let move_speed = 10.0 * FIXED_TIMESTEP;
-
         let player_id = client_packet.player_id;
         if let Some(player_data) = self.players.get_mut(&player_id) {
             match client_packet.action {
@@ -174,7 +172,7 @@ impl Server {
                 ClientAction::PlayerAction(action) => match action {
                     PlayerActions::BreakBlock(rot, pos) => {
                         let distance = distance(&pos, &player_data.position);
-                        if distance < 0.5 {
+                        if distance < MAX_ACCEPTABLE_POSITION_DELTA {
                             if let Some(raycast_result) = cast_ray(pos, rot, &self.chunks, 64) {
                                 if let Some(chunk) = self.chunks.get_mut(&raycast_result.hit.0) {
                                     let mut new_client_chunk = (*(chunk.load_full())).clone();
@@ -190,7 +188,7 @@ impl Server {
                     }
                     PlayerActions::PlaceBlock(rot, pos) => {
                         let distance = distance(&pos, &player_data.position);
-                        if distance < 0.5 {
+                        if distance < MAX_ACCEPTABLE_POSITION_DELTA {
                             if let Some(raycast_result) = cast_ray(pos, rot, &self.chunks, 64) {
                                 if let Some(chunk) = self.chunks.get_mut(&raycast_result.previous.0)
                                 {
@@ -207,29 +205,29 @@ impl Server {
                     }
                     PlayerActions::MoveForwards(rot) => {
                         let (sin_y, cos_y) = rot.y.sin_cos();
-                        player_data.position.x += cos_y * move_speed;
-                        player_data.position.z += sin_y * move_speed;
+                        player_data.position.x += cos_y * MOVE_SPEED;
+                        player_data.position.z += sin_y * MOVE_SPEED;
                     }
                     PlayerActions::MoveBackwards(rot) => {
                         let (sin_y, cos_y) = rot.y.sin_cos();
-                        player_data.position.x -= cos_y * move_speed;
-                        player_data.position.z -= sin_y * move_speed;
+                        player_data.position.x -= cos_y * MOVE_SPEED;
+                        player_data.position.z -= sin_y * MOVE_SPEED;
                     }
                     PlayerActions::MoveLeft(rot) => {
                         let (sin_y, cos_y) = rot.y.sin_cos();
-                        player_data.position.x -= sin_y * move_speed;
-                        player_data.position.z += cos_y * move_speed;
+                        player_data.position.x -= sin_y * MOVE_SPEED;
+                        player_data.position.z += cos_y * MOVE_SPEED;
                     }
                     PlayerActions::MoveRight(rot) => {
                         let (sin_y, cos_y) = rot.y.sin_cos();
-                        player_data.position.x += sin_y * move_speed;
-                        player_data.position.z -= cos_y * move_speed;
+                        player_data.position.x += sin_y * MOVE_SPEED;
+                        player_data.position.z -= cos_y * MOVE_SPEED;
                     }
                     PlayerActions::MoveUp => {
-                        player_data.position.y += move_speed;
+                        player_data.position.y += MOVE_SPEED;
                     }
                     PlayerActions::MoveDown => {
-                        player_data.position.y -= move_speed;
+                        player_data.position.y -= MOVE_SPEED;
                     }
                 },
                 ClientAction::DebugPlayer => {
@@ -346,7 +344,7 @@ impl Server {
         if let Some(chunk) = chunks.get(chunk_pos) {
             let chunk_arc = chunk.load_full();
             if let Some(queue) = new_chunk_queues.get_mut(player_id) {
-                queue.push_back(ServerPacket::Chunk(chunk_arc.clone()));
+                queue.push_back(ServerPacket::Chunk(Box::new((*chunk_arc).clone())));
             }
             return true;
         }
@@ -389,19 +387,15 @@ impl Server {
     }
 
     pub fn receive_chunk_from_generation(&mut self) {
-        let mut i = 0;
-        while let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv()
-            && i < 20
-        {
+        while let Ok((pos, chunk)) = self.generated_chunk_receiver.try_recv() {
             self.chunks.insert(pos, ArcSwap::new(Arc::new(chunk)));
-            i += 1;
         }
     }
 
     pub fn send_chunk_packets(&mut self) {
         for (player_id, queue) in self.new_chunk_queues.iter_mut() {
             if let Some(player_data) = self.players.get(player_id) {
-                let first_packets = queue.drain(0..std::cmp::min(5, queue.len()));
+                let first_packets = queue.drain(0..std::cmp::min(MAX_NEW_CHUNK_COUNT, queue.len()));
 
                 for packet in first_packets {
                     Self::send_packet(player_data, packet);
@@ -413,7 +407,8 @@ impl Server {
     fn send_packet(player_data: &PlayerData, server_packet: ServerPacket) {
         match &player_data.connection_type {
             ConnectionType::Local(server_packet_sender, _) => {
-                let result = server_packet_sender.send(server_packet);
+                let bytes = bincode::serialize(&server_packet).unwrap();
+                let result = server_packet_sender.send(bytes);
 
                 if let Err(error) = result {
                     eprintln!("Error sending packet: {}", error);

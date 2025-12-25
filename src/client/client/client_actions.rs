@@ -65,6 +65,7 @@ impl ClientKeybindableActions {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum PlayerActions {
     BreakBlock(Vec3, EntityPos),
     PlaceBlock(Vec3, EntityPos),

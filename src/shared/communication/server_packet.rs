@@ -1,26 +1,28 @@
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 
 use crate::shared::{
     chunk::Chunk,
     communication::player_data::{ClientPlayerData, SendablePlayerData},
 };
 
+#[derive(Serialize, Deserialize)]
 pub enum ServerPacket {
     Ping,
-    Chunk(Arc<Chunk>),
+    Chunk(Box<Chunk>),
     PlayerData(ClientPlayerData),
     DebugPlayer(Box<SendablePlayerData>),
     DebugChunk(Box<DebugChunkData>),
     Denial(DenialReason),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct DebugChunkData {
     pub chunk_count: u32,
     pub dirty_chunks: u32,
     pub generating_chunks: u32,
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum DenialReason {
     InsufficientPermissions,
 }

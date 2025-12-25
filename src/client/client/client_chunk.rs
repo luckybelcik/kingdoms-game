@@ -24,6 +24,10 @@ impl ClientChunk {
             mesh: ArcSwap::new(Arc::new(mesh)),
         }
     }
+
+    pub fn new_prewrapped(chunk: ArcSwap<Chunk>, mesh: ArcSwap<StoredChunkMesh>) -> Self {
+        Self { chunk, mesh }
+    }
 }
 
 impl WorldInspector for FxHashMap<ChunkPos, ClientChunk> {

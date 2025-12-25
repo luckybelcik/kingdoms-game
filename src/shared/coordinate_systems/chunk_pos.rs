@@ -1,10 +1,22 @@
 use bytemuck::{Pod, Zeroable};
+use serde::{Deserialize, Serialize};
 
 use crate::shared::constants::CHUNK_SIZE;
 use crate::shared::coordinate_systems::{block_pos::BlockPos, chunk_relative::ChunkRelative};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Zeroable, Pod)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Zeroable,
+    Pod,
+    Serialize,
+    Deserialize
+)]
 pub struct ChunkPos(nalgebra_glm::IVec3);
 
 impl ChunkPos {

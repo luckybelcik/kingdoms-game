@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::shared::coordinate_systems::block_pos::BlockPos;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct EntityPos(nalgebra_glm::Vec3);
 
 impl EntityPos {

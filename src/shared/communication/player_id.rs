@@ -1,4 +1,6 @@
-#[derive(Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Hash, PartialEq, PartialOrd, Ord, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct PlayerId {
     id: u64,
 }
