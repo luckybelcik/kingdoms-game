@@ -34,6 +34,7 @@ struct VertexOutput {
     @location(0) uv: vec2<f32>,
     @location(1) atlas_offset: vec2<f32>,
     @location(2) debug_color: vec3<f32>,
+    @location(3) brightness: f32,
 };
 
 const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
@@ -133,6 +134,27 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
         }
     }
 
+    switch face_normal {
+        case 0u: {
+            out.brightness = 0.6;
+        }
+        case 1u: {
+            out.brightness = 0.6;
+        }
+        case 2u: {
+            out.brightness = 1.0;
+        }
+        case 3u: {
+            out.brightness = 0.5;
+        }
+        case 4u: {
+            out.brightness = 0.8;
+        }
+        default: {
+            out.brightness = 0.8;
+        }
+    }
+
     let instance_local_pos = vec4<f32>(f32(x), f32(y), f32(z), 0.0);
 
     let multiplied_chunk_pos = push.chunk_pos * 32;
@@ -165,11 +187,14 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let render_textures = bool(push.app_render_config & 1);
+    var color: vec4<f32>;
     if !render_textures {
-        return vec4<f32>(in.debug_color, 1.0);
+        color = vec4<f32>(in.debug_color, 1.0);
+    } else {
+        let atlas_tile_size = 0.25;
+        let wrapped_uv = (in.uv % atlas_tile_size) + in.atlas_offset;
+        color = textureSample(t_diffuse, s_diffuse, wrapped_uv);
     }
 
-    let atlas_tile_size = 0.25;
-    let wrapped_uv = (in.uv % atlas_tile_size) + in.atlas_offset;
-    return textureSample(t_diffuse, s_diffuse, wrapped_uv);
+    return color * vec4<f32>(in.brightness, in.brightness, in.brightness, 1.0);
 }
