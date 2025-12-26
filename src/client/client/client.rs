@@ -39,6 +39,7 @@ pub struct Client {
     player_data: Option<ClientPlayerData>,
     player_id: PlayerId,
     connection_type: ClientConnectionType,
+    tick: u128,
 }
 
 impl Client {
@@ -53,6 +54,7 @@ impl Client {
             player_data: None,
             player_id,
             connection_type,
+            tick: 0,
         }
     }
 
@@ -93,6 +95,15 @@ impl Client {
             }
         }
 
+        if self.tick.is_multiple_of(19) {
+            if let Some(data) = &self.player_data {
+                self.send_packet(ClientPacket {
+                    player_id: self.player_id,
+                    action: ClientAction::DebugCheckSync(data.clone()),
+                });
+            }
+        }
+
         match &self.connection_type {
             ClientConnectionType::Local(details) => {
                 while let Ok(server_packet) = details.server_packet_receiver.try_recv() {
@@ -114,6 +125,8 @@ impl Client {
 
         self.mesher
             .upload_for_remeshing(&mut self.dirty_chunks, &mut self.chunks);
+
+        self.tick += 1;
     }
 
     pub fn update_meshes(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator) {

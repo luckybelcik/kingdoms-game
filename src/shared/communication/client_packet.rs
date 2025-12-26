@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::client::client_actions::PlayerActions, shared::communication::player_id::PlayerId,
+    client::client::client_actions::PlayerActions,
+    shared::communication::{player_data::ClientPlayerData, player_id::PlayerId},
 };
 
 #[derive(Serialize, Deserialize)]
@@ -17,4 +18,5 @@ pub enum ClientAction {
     PlayerAction(PlayerActions),
     DebugPlayer,
     DebugChunks,
+    DebugCheckSync(ClientPlayerData),
 }

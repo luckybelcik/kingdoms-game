@@ -21,7 +21,7 @@ use crate::{
         chunk::Chunk,
         communication::{
             client_packet::{ClientAction, ClientPacket},
-            player_data::{ConnectionType, PlayerData, PlayerPermissions},
+            player_data::{ClientPlayerData, ConnectionType, PlayerData, PlayerPermissions},
             player_id::PlayerId,
             server_packet::{DebugChunkData, DenialReason, ServerPacket},
         },
@@ -248,6 +248,10 @@ impl Server {
                         PlayerPermissions::Helper,
                     );
                 }
+                ClientAction::DebugCheckSync(received_data) => {
+                    let stored_data = player_data.to_client_data();
+                    ClientPlayerData::log_desync(&stored_data, &received_data);
+                }
             }
         }
     }
@@ -256,7 +260,7 @@ impl Server {
         for (player_id, player_data) in self.players.iter_mut() {
             let player_chunk_pos = player_data.position.to_block_pos().to_chunk_pos();
 
-            let load_new_chunks = self.tick.is_multiple_of(19) // only 1 update per 20 ticks
+            let load_new_chunks = self.tick.is_multiple_of(19) // only update per 20 ticks
                 && player_chunk_pos
                     != player_data.chunk_tick_position;
             // If player chunk pos changed, load new chunks

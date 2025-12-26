@@ -45,7 +45,7 @@ impl PlayerData {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct ClientPlayerData {
     pub player_permissions: PlayerPermissions,
     pub name: String,
