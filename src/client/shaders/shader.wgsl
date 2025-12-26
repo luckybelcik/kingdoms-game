@@ -7,10 +7,13 @@ const QUAD_VERTICES: array<vec3<f32>, 4> = array<vec3<f32>, 4>(
 
 struct Vertex {
     position: u32,
-    id: u32,
+    block_id: u32,
 }
 
 @group(0) @binding(0) var<storage, read> chunk_SSBO: array<u32>;
+
+@group(1) @binding(0) var t_diffuse: texture_2d<f32>;
+@group(1) @binding(1) var s_diffuse: sampler;
 
 struct PushConstants {
     pv: mat4x4<f32>,
@@ -28,7 +31,9 @@ struct VertexInput {
 };
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) atlas_offset: vec2<f32>,
+    @location(2) debug_color: vec3<f32>,
 };
 
 const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
@@ -82,15 +87,15 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     let pos = chunk_SSBO[proper_offset];
     let id = chunk_SSBO[proper_offset + 1];
 
-    let block_id = (id >> 0u) & 65535;
+    var block_id = (id >> 0u) & 65535;
     let face_normal = (id >> 16u) & 7;
 
     // 0b11111 = 31
     var x = pos & 31;
     var y = (pos >> 5u) & 31;
     var z = (pos >> 10u) & 31;
-    let h = ((pos >> 15u) & 31) + 1u;
-    let w = ((pos >> 20u) & 31) + 1u;
+    let h = f32(((pos >> 15u) & 31) + 1u);
+    let w = f32(((pos >> 20u) & 31) + 1u);
 
     var transparency: f32 = 1.0;
     if block_id == 0 {
@@ -101,43 +106,30 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 
     var out: VertexOutput;
     var quad_pos: vec3<f32>;
+    var local_uv = vec2<f32>(0.0, 0.0);
+    out.debug_color = vec3<f32>(0.0, 0.0, 0.0);
     switch in.vertex_id {
         case 0u: {
-            out.color = vec4<f32>(1.0, 0.0, 0.0, transparency);
+            out.debug_color = vec3<f32>(1.0, 0.0, 0.0);
             quad_pos = QUAD_VERTICES[0];
         }
         case 1u: {
-            out.color = vec4<f32>(0.0, 1.0, 0.0, transparency);
+            out.debug_color = vec3<f32>(0.0, 1.0, 0.0);
             quad_pos = QUAD_VERTICES[1];
+            local_uv = vec2<f32>(h, 0.0);
         }
         case 2u: {
-            out.color = vec4<f32>(0.0, 0.0, 1.0, transparency);
+            out.debug_color = vec3<f32>(0.0, 0.0, 1.0);
             quad_pos = QUAD_VERTICES[2];
+            local_uv = vec2<f32>(0.0, w);
         }
         case 3u: {
-            out.color = vec4<f32>(0.0, 0.0, 0.0, transparency);
+            out.debug_color = vec3<f32>(0.0, 0.0, 0.0);
             quad_pos = QUAD_VERTICES[3];
+            local_uv = vec2<f32>(h, w);
         }
         default: {
-            out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
             quad_pos = vec3<f32>(0.0, 0.0, 0.0);
-        }
-    }
-
-    if render_textures {
-        switch block_id {
-            case 1u: { // stone
-                out.color = vec4<f32>(0.32, 0.32, 0.32, 1.0);
-            }
-            case 2u: { // dirt
-                out.color = vec4<f32>(0.36, 0.27, 0.17, 1.0);
-            }
-            case 3u: { // grass
-                out.color = vec4<f32>(0.35, 0.54, 0.28, 1.0);
-            }
-            default: {
-                out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-            }
         }
     }
 
@@ -150,19 +142,34 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 
     var stretched_quad_pos = quad_pos;
     if face_normal == 1 || face_normal == 2 || face_normal == 5 {
-        stretched_quad_pos.x = quad_pos.x * f32(h) - f32(h - 1);
+        stretched_quad_pos.x = (quad_pos.x * h) - (h - 1.0);
     } else {
-        stretched_quad_pos.x = quad_pos.x * f32(h);
+        stretched_quad_pos.x = quad_pos.x * h;
     }
 
-    stretched_quad_pos.y = quad_pos.y * f32(w);
+    stretched_quad_pos.y = quad_pos.y * w;
 
+    let atlas_dim: f32 = 4.0;
+    let inv_atlas_dim: f32 = 1.0 / atlas_dim;
 
+    let u_idx = f32((block_id - 1) % 4u);
+    let v_idx = f32((block_id - 1) / 4u);
+    let base_uv = vec2<f32>(u_idx, v_idx) * inv_atlas_dim;
+
+    out.uv = local_uv * inv_atlas_dim;
+    out.atlas_offset = base_uv;
     out.position = push.pv * ((instance_local_pos + face_transform * vec4<f32>(stretched_quad_pos, 1.0)) + final_chunk_pos);
     return out;
 };
 
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(in.color);
+    let render_textures = bool(push.app_render_config & 1);
+    if !render_textures {
+        return vec4<f32>(in.debug_color, 1.0);
+    }
+
+    let atlas_tile_size = 0.25;
+    let wrapped_uv = (in.uv % atlas_tile_size) + in.atlas_offset;
+    return textureSample(t_diffuse, s_diffuse, wrapped_uv);
 }

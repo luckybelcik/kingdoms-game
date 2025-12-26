@@ -156,6 +156,8 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
+            render_pass.set_bind_group(1, Some(&self.gpu.diffuse_bind_group), &[]);
+
             results = self
                 .scene
                 .render(&mut render_pass, client, self.gpu.aspect_ratio());

@@ -1,4 +1,5 @@
 use crate::client::client::config::render_config::{RenderConfig, RenderFlags};
+use crate::client::rendering::gpu::get_texture_bind_group_layout;
 use crate::{
     client::{
         client::client::Client,
@@ -151,7 +152,10 @@ impl Scene {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&get_chunk_ssbo_layout(device)],
+            bind_group_layouts: &[
+                &get_chunk_ssbo_layout(device),
+                &get_texture_bind_group_layout(device),
+            ],
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
@@ -214,7 +218,10 @@ impl Scene {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&get_chunk_ssbo_layout(device)],
+            bind_group_layouts: &[
+                &get_chunk_ssbo_layout(device),
+                &get_texture_bind_group_layout(device),
+            ],
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
