@@ -323,6 +323,10 @@ impl Client {
             ClientKeybindableActions::MoveForwards => {
                 self.camera_pos.x += cos_y * move_speed;
                 self.camera_pos.z += sin_y * move_speed;
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.position.x += cos_y * move_speed;
+                    player_data.position.z += sin_y * move_speed;
+                }
                 self.send_packet(ClientPacket {
                     player_id: self.player_id,
                     action: ClientAction::PlayerAction(PlayerActions::MoveForwards(
@@ -333,6 +337,10 @@ impl Client {
             ClientKeybindableActions::MoveBackwards => {
                 self.camera_pos.x -= cos_y * move_speed;
                 self.camera_pos.z -= sin_y * move_speed;
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.position.x -= cos_y * move_speed;
+                    player_data.position.z -= sin_y * move_speed;
+                }
                 self.send_packet(ClientPacket {
                     player_id: self.player_id,
                     action: ClientAction::PlayerAction(PlayerActions::MoveBackwards(
@@ -343,6 +351,10 @@ impl Client {
             ClientKeybindableActions::MoveLeft => {
                 self.camera_pos.x -= sin_y * move_speed;
                 self.camera_pos.z += cos_y * move_speed;
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.position.x -= sin_y * move_speed;
+                    player_data.position.z += cos_y * move_speed;
+                }
                 self.send_packet(ClientPacket {
                     player_id: self.player_id,
                     action: ClientAction::PlayerAction(PlayerActions::MoveLeft(self.camera_rot)),
@@ -351,6 +363,10 @@ impl Client {
             ClientKeybindableActions::MoveRight => {
                 self.camera_pos.x += sin_y * move_speed;
                 self.camera_pos.z -= cos_y * move_speed;
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.position.x += sin_y * move_speed;
+                    player_data.position.z -= cos_y * move_speed;
+                }
                 self.send_packet(ClientPacket {
                     player_id: self.player_id,
                     action: ClientAction::PlayerAction(PlayerActions::MoveRight(self.camera_rot)),
@@ -358,6 +374,9 @@ impl Client {
             }
             ClientKeybindableActions::MoveUp => {
                 self.camera_pos.y += move_speed;
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.position.y += move_speed;
+                }
                 self.send_packet(ClientPacket {
                     player_id: self.player_id,
                     action: ClientAction::PlayerAction(PlayerActions::MoveUp),
@@ -365,6 +384,9 @@ impl Client {
             }
             ClientKeybindableActions::MoveDown => {
                 self.camera_pos.y -= move_speed;
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.position.y -= move_speed;
+                }
                 self.send_packet(ClientPacket {
                     player_id: self.player_id,
                     action: ClientAction::PlayerAction(PlayerActions::MoveDown),
