@@ -189,9 +189,9 @@ impl SendableChunkMesh {
                         }
 
                         let width_mask = if width == CHUNK_SIZE {
-                            !0u64
+                            !0u32
                         } else {
-                            ((1u64 << width) - 1) << tz
+                            ((1u32 << width) - 1) << tz
                         };
 
                         let mut height = 1;

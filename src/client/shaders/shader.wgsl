@@ -85,12 +85,12 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     let block_id = (id >> 0u) & 65535;
     let face_normal = (id >> 16u) & 7;
 
-    // 0b111111 = 63
-    var x = pos & 63;
-    var y = (pos >> 6u) & 63;
-    var z = (pos >> 12u) & 63;
-    let h = ((pos >> 18u) & 63) + 1u;
-    let w = ((pos >> 24u) & 63) + 1u;
+    // 0b11111 = 31
+    var x = pos & 31;
+    var y = (pos >> 5u) & 31;
+    var z = (pos >> 10u) & 31;
+    let h = ((pos >> 15u) & 31) + 1u;
+    let w = ((pos >> 20u) & 31) + 1u;
 
     var transparency: f32 = 1.0;
     if block_id == 0 {
@@ -106,7 +106,7 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
             out.color = vec4<f32>(1.0, 0.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[0];
         }
-        case 1u: { 
+        case 1u: {
             out.color = vec4<f32>(0.0, 1.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[1];
         }
@@ -114,12 +114,12 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
             out.color = vec4<f32>(0.0, 0.0, 1.0, transparency);
             quad_pos = QUAD_VERTICES[2];
         }
-        case 3u: { 
+        case 3u: {
             out.color = vec4<f32>(0.0, 0.0, 0.0, transparency);
             quad_pos = QUAD_VERTICES[3];
         }
         default: {
-            out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0); 
+            out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
             quad_pos = vec3<f32>(0.0, 0.0, 0.0);
         }
     }
@@ -136,14 +136,14 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
                 out.color = vec4<f32>(0.35, 0.54, 0.28, 1.0);
             }
             default: {
-                out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0); 
+                out.color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
             }
         }
     }
 
     let instance_local_pos = vec4<f32>(f32(x), f32(y), f32(z), 0.0);
 
-    let multiplied_chunk_pos = push.chunk_pos * 64;
+    let multiplied_chunk_pos = push.chunk_pos * 32;
     let final_chunk_pos = vec4<f32>(f32(multiplied_chunk_pos.x), f32(multiplied_chunk_pos.y), f32(multiplied_chunk_pos.z), 0);
 
     let face_transform = FACE_TRANSFORMS[face_normal];

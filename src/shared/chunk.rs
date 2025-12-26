@@ -70,13 +70,13 @@ impl Chunk {
         unsafe {
             *self.blocks.get_unchecked_mut(block_idx) = block;
 
-            let is_not_air = (block != 0) as u64;
+            let is_not_air = (block != 0) as ChunkBitRow;
 
-            let bit_x = 1u64 << x;
+            let bit_x = (1 as ChunkBitRow) << x;
             let mask_a = self.chunk_mask.get_unchecked_mut(mask_idx_a);
             *mask_a = (*mask_a & !bit_x) | (is_not_air.wrapping_neg() & bit_x);
 
-            let bit_z = 1u64 << z;
+            let bit_z = (1 as ChunkBitRow) << z;
             let mask_b = self.xz_swap_chunk_mask.get_unchecked_mut(mask_idx_b);
             *mask_b = (*mask_b & !bit_z) | (is_not_air.wrapping_neg() & bit_z);
         }
