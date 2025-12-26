@@ -2,8 +2,11 @@ use std::{collections::HashMap, fs::File, io::Read};
 
 use winit::keyboard::KeyCode;
 
-use crate::client::{
-    app::app_actions::AppKeybindableActions, client::client_actions::ClientKeybindableActions,
+use crate::{
+    CONFIG_DIR,
+    client::{
+        app::app_actions::AppKeybindableActions, client::client_actions::ClientKeybindableActions,
+    },
 };
 
 pub struct InputHandler {
@@ -14,8 +17,10 @@ pub struct InputHandler {
 
 impl InputHandler {
     pub fn new() -> Self {
-        let mut app_json_file = File::open("src/config/app_keys.json").unwrap();
-        let mut client_json_file = File::open("src/config/client_keys.json").unwrap();
+        let mut app_json_file =
+            File::open(CONFIG_DIR.get().unwrap().join("app_keys.json")).unwrap();
+        let mut client_json_file =
+            File::open(CONFIG_DIR.get().unwrap().join("client_keys.json")).unwrap();
 
         let mut app_json_str = String::new();
         let mut client_json_str = String::new();
