@@ -295,6 +295,10 @@ impl StoredChunkMesh {
         self.chunk_draw_call_infos.clear();
     }
 
+    pub fn get_offset_and_size(&self) -> (Offset, PhysicalSize) {
+        return (self.allocator_offset.unwrap(), self.allocated_size.unwrap());
+    }
+
     pub fn update_mesh(
         &mut self,
         queue: &wgpu::Queue,

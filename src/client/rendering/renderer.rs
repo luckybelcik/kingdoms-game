@@ -66,6 +66,7 @@ impl Renderer {
         self.scene.update(&self.gpu.queue);
 
         if let Some(client) = client {
+            client.purge_unused_meshes(&self.gpu.queue, &mut self.chunk_ssbo);
             client.update_meshes(&self.gpu.queue, &mut self.chunk_ssbo);
         }
 

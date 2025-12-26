@@ -25,7 +25,7 @@ use std::{f32::consts::PI, sync::Arc};
 use arc_swap::ArcSwap;
 use nalgebra_glm::{Vec3, vec3};
 use rustc_hash::{FxHashMap, FxHashSet};
-use wgpu_buffer_allocator::allocator::SSBOAllocator;
+use wgpu_buffer_allocator::allocator::{Offset, PhysicalSize, SSBOAllocator};
 
 use crate::{client::client::mesher::Mesher, shared::coordinate_systems::chunk_pos::ChunkPos};
 
@@ -40,6 +40,7 @@ pub struct Client {
     player_id: PlayerId,
     connection_type: ClientConnectionType,
     tick: u128,
+    pub ssbo_data_to_free: Vec<(Offset, PhysicalSize)>,
 }
 
 impl Client {
@@ -55,6 +56,7 @@ impl Client {
             player_id,
             connection_type,
             tick: 0,
+            ssbo_data_to_free: Vec::new(),
         }
     }
 
@@ -129,6 +131,16 @@ impl Client {
         self.tick += 1;
     }
 
+    pub fn purge_unused_meshes(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator) {
+        for meshes_to_free in &self.ssbo_data_to_free {
+            allocator
+                .deallocate_wipe(queue, meshes_to_free.0)
+                .expect("Couldn't deallocate block:");
+        }
+
+        self.ssbo_data_to_free.clear();
+    }
+
     pub fn update_meshes(&mut self, queue: &wgpu::Queue, allocator: &mut SSBOAllocator) {
         let meshes = self.mesher.receive_from_remeshing();
 
@@ -154,7 +166,12 @@ impl Client {
                     ArcSwap::new(Arc::from(chunk)),
                     ArcSwap::new(Arc::new(mesh)),
                 );
-                self.chunks.insert(pos, client_chunk);
+                // replace chunk
+                if let Some(client_chunk) = self.chunks.insert(pos, client_chunk) {
+                    // and if chunk existed before, clear data from SSBO
+                    let mesh = client_chunk.mesh.load();
+                    self.ssbo_data_to_free.push(mesh.get_offset_and_size());
+                }
                 self.dirty_chunks.insert(pos);
                 self.dirty_chunks.insert(pos.offset_copy(1, 0, 0));
                 self.dirty_chunks.insert(pos.offset_copy(-1, 0, 0));
