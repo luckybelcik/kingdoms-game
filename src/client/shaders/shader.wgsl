@@ -40,45 +40,45 @@ struct VertexOutput {
 const FACE_TRANSFORMS: array<mat4x4<f32>, 6> = array<mat4x4<f32>, 6>(
     // 0: +X (Right)
     mat4x4<f32>(
-        vec4<f32>(0.0, 0.0, 1.0, 0.0),
-        vec4<f32>(0.0, 1.0, 0.0, 0.0),
-        vec4<f32>(1.0, 0.0, 0.0, 0.0),
-        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+        vec4<f32>(0.0, 0.0, -1.0, 0.0),
+        vec4<f32>(0.0, -1.0, 0.0, 0.0),
+        vec4<f32>(-1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 1.0, 1.0)
     ),
     // 1: -X (Left)
     mat4x4<f32>(
-        vec4<f32>(0.0, 0.0, -1.0, 0.0),
-        vec4<f32>(0.0, 1.0, 0.0, 0.0),
-        vec4<f32>(1.0, 0.0, 0.0, 0.0),
-        vec4<f32>(1.0, 0.0, 1.0, 1.0)
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, -1.0, 0.0, 0.0),
+        vec4<f32>(-1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(1.0, 1.0, 0.0, 1.0)
     ),
     // 2: +Y (Top)
     mat4x4<f32>(
+        vec4<f32>(0.0, 0.0, -1.0, 0.0),
         vec4<f32>(-1.0, 0.0, 0.0, 0.0),
-        vec4<f32>(0.0, 0.0, 1.0, 0.0),
         vec4<f32>(0.0, -1.0, 0.0, 0.0),
-        vec4<f32>(1.0, 1.0, 0.0, 1.0)
+        vec4<f32>(1.0, 1.0, 1.0, 1.0)
     ),
     // 3: -Y (Bottom)
     mat4x4<f32>(
-        vec4<f32>(1.0, 0.0, 0.0, 0.0),
         vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(-1.0, 0.0, 0.0, 0.0),
         vec4<f32>(0.0, -1.0, 0.0, 0.0),
-        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+        vec4<f32>(1.0, 0.0, 0.0, 1.0)
     ),
     // 4: +Z (Front)
     mat4x4<f32>(
-        vec4<f32>(1.0, 0.0, 0.0, 0.0),
-        vec4<f32>(0.0, 1.0, 0.0, 0.0),
-        vec4<f32>(0.0, 0.0, 1.0, 0.0),
-        vec4<f32>(0.0, 0.0, 1.0, 1.0)
+        vec4<f32>(-1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, -1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, -1.0, 0.0),
+        vec4<f32>(1.0, 1.0, 1.0, 1.0)
     ),
     // 5: -Z (Back)
     mat4x4<f32>(
-        vec4<f32>(-1.0, 0.0, 0.0, 0.0),
-        vec4<f32>(0.0, 1.0, 0.0, 0.0),
-        vec4<f32>(0.0, 0.0, -1.0, 0.0),
-        vec4<f32>(1.0, 0.0, 0.0, 1.0)
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, -1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 1.0)
     ),
 );
 
@@ -163,13 +163,13 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     let face_transform = FACE_TRANSFORMS[face_normal];
 
     var stretched_quad_pos = quad_pos;
-    if face_normal == 1 || face_normal == 2 || face_normal == 5 {
+    if face_normal == 0 || face_normal == 2 || face_normal == 4 {
         stretched_quad_pos.x = (quad_pos.x * h) - (h - 1.0);
     } else {
         stretched_quad_pos.x = quad_pos.x * h;
     }
 
-    stretched_quad_pos.y = quad_pos.y * w;
+    stretched_quad_pos.y = (quad_pos.y * w) - (w - 1.0);
 
     let atlas_dim: f32 = 4.0;
     let inv_atlas_dim: f32 = 1.0 / atlas_dim;
@@ -186,15 +186,24 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let render_textures = bool(push.app_render_config & 1);
+let render_textures = bool(push.app_render_config & 1);
     var color: vec4<f32>;
+
     if !render_textures {
         color = vec4<f32>(in.debug_color, 1.0);
     } else {
         let atlas_tile_size = 0.25;
-        let wrapped_uv = (in.uv % atlas_tile_size) + in.atlas_offset;
-        color = textureSample(t_diffuse, s_diffuse, wrapped_uv);
+        let ddx = dpdx(in.uv);
+        let ddy = dpdy(in.uv);
+        let local_uv = in.uv % atlas_tile_size;
+        let normalized_uv = local_uv / atlas_tile_size;
+        let shrink = 0.0005;
+        let inset_uv = normalized_uv * (1.0 - 2.0 * shrink) + shrink;
+        let final_uv = (inset_uv * atlas_tile_size) + in.atlas_offset;
+
+        color = textureSampleGrad(t_diffuse, s_diffuse, final_uv, ddx, ddy);
     }
 
-    return color * vec4<f32>(in.brightness, in.brightness, in.brightness, 1.0);
+    let b = in.brightness;
+    return color * vec4<f32>(b, b, b, 1.0);
 }

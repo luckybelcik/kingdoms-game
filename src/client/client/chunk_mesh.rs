@@ -227,8 +227,8 @@ impl SendableChunkMesh {
                                 data: ((tz as usize)
                                     | (z << CHUNK_POS_BITS)
                                     | (y << (CHUNK_POS_BITS * 2))
-                                    | ((width - 1) << (CHUNK_POS_BITS * 3))
-                                    | ((height - 1) << (CHUNK_POS_BITS * 4)))
+                                    | ((height - 1) << (CHUNK_POS_BITS * 3))
+                                    | ((width - 1) << (CHUNK_POS_BITS * 4)))
                                     as u32,
                                 id: 1 | ((i as u32) << 16),
                             };

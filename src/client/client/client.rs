@@ -326,7 +326,7 @@ impl Client {
             return;
         }
 
-        let move_speed = 10.0 * delta_seconds;
+        let move_speed = 2.0 * delta_seconds;
         let rotation_speed = 1.0 * delta_seconds;
         let (sin_y, cos_y) = self.camera_rot.y.sin_cos();
 
