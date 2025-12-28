@@ -1,7 +1,7 @@
 use image::GenericImageView;
 use wgpu::{Backends, BindGroupLayout};
 
-use crate::shared::render::push_constants::PUSH_CONSTANTS_SIZE;
+use crate::{client::constants::MIP_LEVELS, shared::render::push_constants::PUSH_CONSTANTS_SIZE};
 
 pub struct Gpu {
     pub surface: wgpu::Surface<'static>,
@@ -121,7 +121,6 @@ impl Gpu {
         let diffuse_bytes = include_bytes!("../../data/atlas.png");
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
         let diffuse_rgba = diffuse_image.to_rgba8();
-
         let dimensions = diffuse_image.dimensions();
 
         let texture_size = wgpu::Extent3d {
@@ -132,7 +131,7 @@ impl Gpu {
 
         let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
             size: texture_size,
-            mip_level_count: 1,
+            mip_level_count: MIP_LEVELS + 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
@@ -157,6 +156,36 @@ impl Gpu {
             texture_size,
         );
 
+        for i in 1..=MIP_LEVELS {
+            let mip_width = (dimensions.0 >> i).max(1);
+            let mip_height = (dimensions.1 >> i).max(1);
+
+            let mip_image =
+                diffuse_image.resize(mip_width, mip_height, image::imageops::FilterType::Lanczos3);
+
+            let mip_texture_size = wgpu::Extent3d {
+                width: mip_width,
+                height: mip_height,
+                depth_or_array_layers: 1,
+            };
+
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &diffuse_texture,
+                    mip_level: i,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &mip_image.to_rgba8(),
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * mip_width),
+                    rows_per_image: Some(mip_height),
+                },
+                mip_texture_size,
+            );
+        }
+
         let diffuse_texture_view =
             diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -165,7 +194,7 @@ impl Gpu {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
