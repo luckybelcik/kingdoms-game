@@ -1,7 +1,10 @@
 use image::GenericImageView;
 use wgpu::{Backends, BindGroupLayout};
 
-use crate::{client::constants::MIP_LEVELS, shared::render::push_constants::PUSH_CONSTANTS_SIZE};
+use crate::{
+    client::constants::{MIP_LEVELS, TILE_SIZE_PIXELS},
+    shared::render::push_constants::PUSH_CONSTANTS_SIZE,
+};
 
 pub struct Gpu {
     pub surface: wgpu::Surface<'static>,
@@ -157,11 +160,36 @@ impl Gpu {
         );
 
         for i in 1..=MIP_LEVELS {
+            let current_tile_size = (TILE_SIZE_PIXELS / (1 << i)).max(1);
             let mip_width = (dimensions.0 >> i).max(1);
             let mip_height = (dimensions.1 >> i).max(1);
 
-            let mip_image =
-                diffuse_image.resize(mip_width, mip_height, image::imageops::FilterType::Lanczos3);
+            let mut mip_image = image::RgbaImage::new(mip_width, mip_height);
+
+            for ty in 0..(dimensions.1 / TILE_SIZE_PIXELS) {
+                for tx in 0..(dimensions.0 / TILE_SIZE_PIXELS) {
+                    let tile = diffuse_image.view(
+                        tx * TILE_SIZE_PIXELS,
+                        ty * TILE_SIZE_PIXELS,
+                        TILE_SIZE_PIXELS,
+                        TILE_SIZE_PIXELS,
+                    );
+
+                    let resized_tile = image::imageops::resize(
+                        &tile.to_image(),
+                        current_tile_size,
+                        current_tile_size,
+                        image::imageops::FilterType::Triangle,
+                    );
+
+                    image::imageops::replace(
+                        &mut mip_image,
+                        &resized_tile,
+                        (tx * current_tile_size) as i64,
+                        (ty * current_tile_size) as i64,
+                    );
+                }
+            }
 
             let mip_texture_size = wgpu::Extent3d {
                 width: mip_width,
@@ -176,7 +204,7 @@ impl Gpu {
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
-                &mip_image.to_rgba8(),
+                &mip_image,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * mip_width),
