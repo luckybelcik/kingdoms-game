@@ -1,5 +1,5 @@
 use crate::client::client::config::render_config::{RenderConfig, RenderFlags};
-use crate::client::rendering::gpu::get_texture_bind_group_layout;
+use crate::client::rendering::texture_manager::TextureManager;
 use crate::{
     client::{
         client::client::Client,
@@ -24,8 +24,9 @@ impl Scene {
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
         chunk_ssbo: &wgpu::Buffer,
+        texture_manager: &TextureManager,
     ) -> Self {
-        let pipeline = Self::create_pipeline(device, surface_format);
+        let pipeline = Self::create_pipeline(device, surface_format, texture_manager);
 
         let shared_quad_ibo = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Shared Quad IBO"),
@@ -52,7 +53,7 @@ impl Scene {
         #[cfg(debug_assertions)]
         Self {
             pipeline,
-            line_pipeline: Self::create_line_pipeline(device, surface_format),
+            line_pipeline: Self::create_line_pipeline(device, surface_format, texture_manager),
             shared_quad_ibo,
             chunk_ssbo_bind_group,
         }
@@ -142,6 +143,7 @@ impl Scene {
     fn create_pipeline(
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
+        texture_manager: &TextureManager,
     ) -> wgpu::RenderPipeline {
         let shader_source = include_str!("../shaders/shader.wgsl");
 
@@ -154,7 +156,7 @@ impl Scene {
             label: None,
             bind_group_layouts: &[
                 &get_chunk_ssbo_layout(device),
-                &get_texture_bind_group_layout(device),
+                texture_manager.get_main_atlas_bind_group_layout(),
             ],
             push_constant_ranges: &[PushConstants::get_range()],
         });
@@ -208,6 +210,7 @@ impl Scene {
     fn create_line_pipeline(
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
+        texture_manager: &TextureManager,
     ) -> wgpu::RenderPipeline {
         let shader_source = include_str!("../shaders/shader.wgsl");
 
@@ -220,7 +223,7 @@ impl Scene {
             label: None,
             bind_group_layouts: &[
                 &get_chunk_ssbo_layout(device),
-                &get_texture_bind_group_layout(device),
+                texture_manager.get_main_atlas_bind_group_layout(),
             ],
             push_constant_ranges: &[PushConstants::get_range()],
         });

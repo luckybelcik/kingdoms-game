@@ -2,7 +2,9 @@ use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
 use crate::client::{
     client::client::Client,
-    rendering::{core::Scene, gpu::Gpu, render_results::RenderResults},
+    rendering::{
+        core::Scene, gpu::Gpu, render_results::RenderResults, texture_manager::TextureManager,
+    },
 };
 
 pub struct Renderer {
@@ -11,6 +13,7 @@ pub struct Renderer {
     egui_renderer: egui_wgpu::Renderer,
     scene: Scene,
     chunk_ssbo: SSBOAllocator,
+    texture_manager: TextureManager,
 }
 
 impl Renderer {
@@ -40,7 +43,14 @@ impl Renderer {
 
         let chunk_ssbo = SSBOAllocator::new(&gpu.device, "Chunk SSBO", 134_217_728);
 
-        let scene = Scene::new(&gpu.device, gpu.surface_format, chunk_ssbo.get_buffer());
+        let texture_manager = TextureManager::initialize(&gpu.device, &gpu.queue);
+
+        let scene = Scene::new(
+            &gpu.device,
+            gpu.surface_format,
+            chunk_ssbo.get_buffer(),
+            &texture_manager,
+        );
 
         Self {
             gpu,
@@ -48,6 +58,7 @@ impl Renderer {
             egui_renderer,
             scene,
             chunk_ssbo,
+            texture_manager,
         }
     }
 
@@ -156,7 +167,11 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_bind_group(1, Some(&self.gpu.diffuse_bind_group), &[]);
+            render_pass.set_bind_group(
+                1,
+                Some(self.texture_manager.get_main_atlas_bind_group()),
+                &[],
+            );
 
             results = self
                 .scene
