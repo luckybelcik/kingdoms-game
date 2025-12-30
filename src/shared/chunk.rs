@@ -130,6 +130,10 @@ impl Chunk {
         }
     }
 
+    pub fn get_block_unsafe(&self, index: usize) -> u16 {
+        self.blocks[index]
+    }
+
     pub fn get_chunk_mask(&self) -> &[ChunkBitRow] {
         &self.chunk_mask
     }

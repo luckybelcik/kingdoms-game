@@ -19,6 +19,7 @@ pub struct PlayerData {
     pub connection_type: ConnectionType,
     pub last_ping: Instant,
     pub render_distance: u8,
+    pub selected_block: u16,
 }
 
 impl PlayerData {
@@ -32,6 +33,7 @@ impl PlayerData {
                 ConnectionType::Remote => SendableConnectionType::Remote,
             },
             render_distance: self.render_distance,
+            selected_block: self.selected_block,
         }
     }
 
@@ -41,6 +43,7 @@ impl PlayerData {
             name: self.name.clone(),
             position: self.position.clone(),
             render_distance: self.render_distance,
+            selected_block: 1,
         }
     }
 }
@@ -51,6 +54,7 @@ pub struct ClientPlayerData {
     pub name: String,
     pub position: EntityPos,
     pub render_distance: u8,
+    pub selected_block: u16,
 }
 
 impl ClientPlayerData {
@@ -101,6 +105,7 @@ pub struct SendablePlayerData {
     pub chunk_tick_position: ChunkPos,
     pub connection_type: SendableConnectionType,
     pub render_distance: u8,
+    pub selected_block: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]

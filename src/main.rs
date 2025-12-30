@@ -81,6 +81,9 @@ fn init_data_path() -> Result<(), std::io::Error> {
         CONFIG_DIR.get_or_init(|| config_dir.to_path_buf());
         DATA_DIR.get_or_init(|| data_dir.to_path_buf());
 
+        println!("Config dir: {}", config_dir.to_str().unwrap());
+        println!("Data dir: {}", data_dir.to_str().unwrap());
+
         let app_key_config = config_dir.join("app_keys.json");
         let client_key_config = config_dir.join("client_keys.json");
 
@@ -109,6 +112,8 @@ fn init_data_path() -> Result<(), std::io::Error> {
                     "ArrowDown": "RotateDown",
                     "ArrowLeft": "RotateLeft",
                     "ArrowRight": "RotateRight",
+                    "Equal": "ScrollHotbarRight",
+                    "Minus": "ScrollHotbarLeft",
                     "KeyI": "RequestServerPlayerData",
                     "KeyU": "RequestServerChunkInfo"
                 }"#;

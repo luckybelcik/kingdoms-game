@@ -250,7 +250,7 @@ impl Client {
             }
             ClientKeybindableActions::PlaceBlock => {
                 self.send_packet(ClientPacket {
-                    player_id: self.player_id.clone(),
+                    player_id,
                     action: ClientAction::PlayerAction(PlayerActions::PlaceBlock(
                         self.camera_rot,
                         self.camera_pos,
@@ -260,15 +260,17 @@ impl Client {
                     cast_ray(self.camera_pos, self.camera_rot, &self.chunks, 64)
                 {
                     if let Some(client_chunk) = self.chunks.get_mut(&raycast_result.previous.0) {
-                        client_chunk.chunk.rcu(|old_chunk| {
-                            let mut new_chunk = (**old_chunk).clone();
-                            new_chunk.set_block(
-                                raycast_result.previous.1,
-                                1,
-                                &mut self.dirty_chunks,
-                            );
-                            Arc::new(new_chunk)
-                        });
+                        if let Some(player_data) = &self.player_data {
+                            client_chunk.chunk.rcu(|old_chunk| {
+                                let mut new_chunk = (**old_chunk).clone();
+                                new_chunk.set_block(
+                                    raycast_result.previous.1,
+                                    player_data.selected_block,
+                                    &mut self.dirty_chunks,
+                                );
+                                Arc::new(new_chunk)
+                            });
+                        }
                     }
                 }
             }
@@ -301,6 +303,26 @@ impl Client {
             }
             ClientKeybindableActions::RotateRight => {
                 unreachable!("Action not single press");
+            }
+            ClientKeybindableActions::ScrollHotbarRight => {
+                if let Some(player_data) = &mut self.player_data {
+                    player_data.selected_block += 1;
+                    self.send_packet(ClientPacket {
+                        player_id,
+                        action: ClientAction::PlayerAction(PlayerActions::ScrollHotbarRight),
+                    });
+                }
+            }
+            ClientKeybindableActions::ScrollHotbarLeft => {
+                if let Some(player_data) = &mut self.player_data
+                    && player_data.selected_block > 1
+                {
+                    player_data.selected_block -= 1;
+                    self.send_packet(ClientPacket {
+                        player_id,
+                        action: ClientAction::PlayerAction(PlayerActions::ScrollHotbarLeft),
+                    });
+                }
             }
             ClientKeybindableActions::RequestServerPlayerData => {
                 self.send_packet(ClientPacket {
@@ -420,6 +442,12 @@ impl Client {
             }
             ClientKeybindableActions::RotateRight => {
                 self.camera_rot.y -= rotation_speed;
+            }
+            ClientKeybindableActions::ScrollHotbarRight => {
+                unreachable!("Action not holdable");
+            }
+            ClientKeybindableActions::ScrollHotbarLeft => {
+                unreachable!("Action not holdable");
             }
             ClientKeybindableActions::RequestServerPlayerData => {
                 unreachable!("Action not holdable");

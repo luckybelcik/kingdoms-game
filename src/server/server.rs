@@ -147,6 +147,7 @@ impl Server {
             connection_type: ConnectionType::Local(server_sender, client_receiver),
             last_ping: Instant::now(),
             render_distance: 6,
+            selected_block: 1,
         };
         Self::send_packet(
             &player_data,
@@ -195,7 +196,7 @@ impl Server {
                                     let mut new_client_chunk = (*(chunk.load_full())).clone();
                                     new_client_chunk.set_block(
                                         raycast_result.previous.1,
-                                        1,
+                                        player_data.selected_block,
                                         &mut self.dirty_chunks,
                                     );
                                     chunk.store(Arc::new(new_client_chunk));
@@ -228,6 +229,12 @@ impl Server {
                     }
                     PlayerActions::MoveDown => {
                         player_data.position.y -= MOVE_SPEED;
+                    }
+                    PlayerActions::ScrollHotbarRight => {
+                        player_data.selected_block += 1;
+                    }
+                    PlayerActions::ScrollHotbarLeft => {
+                        player_data.selected_block -= 1;
                     }
                 },
                 ClientAction::DebugPlayer => {

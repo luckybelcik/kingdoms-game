@@ -17,6 +17,8 @@ pub enum ClientKeybindableActions {
     RotateDown,
     RotateLeft,
     RotateRight,
+    ScrollHotbarRight,
+    ScrollHotbarLeft,
     RequestServerPlayerData,
     RequestServerChunkInfo,
 }
@@ -36,6 +38,8 @@ impl ClientKeybindableActions {
             Self::RotateDown => false,
             Self::RotateLeft => false,
             Self::RotateRight => false,
+            Self::ScrollHotbarRight => true,
+            Self::ScrollHotbarLeft => true,
             Self::RequestServerChunkInfo => true,
             Self::RequestServerPlayerData => true,
         }
@@ -59,6 +63,8 @@ impl ClientKeybindableActions {
             Self::RotateDown => true,
             Self::RotateLeft => true,
             Self::RotateRight => true,
+            Self::ScrollHotbarRight => false,
+            Self::ScrollHotbarLeft => false,
             Self::RequestServerChunkInfo => false,
             Self::RequestServerPlayerData => false,
         }
@@ -75,4 +81,6 @@ pub enum PlayerActions {
     MoveRight(Vec3),
     MoveUp,
     MoveDown,
+    ScrollHotbarRight,
+    ScrollHotbarLeft,
 }

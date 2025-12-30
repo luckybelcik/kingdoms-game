@@ -220,7 +220,10 @@ impl SendableChunkMesh {
                                     | ((width - 1) << (CHUNK_POS_BITS * 3))
                                     | ((height - 1) << (CHUNK_POS_BITS * 4)))
                                     as u32,
-                                id: 1 | ((i as u32) << 16),
+                                id: chunk.get_block_unsafe(
+                                    z + y * CHUNK_SIZE + tz as usize * CHUNK_SIZE * CHUNK_SIZE,
+                                ) as u32
+                                    | ((i as u32) << 16),
                             };
                         } else if i < 4 {
                             point = Vertex {
@@ -230,7 +233,10 @@ impl SendableChunkMesh {
                                     | ((height - 1) << (CHUNK_POS_BITS * 3))
                                     | ((width - 1) << (CHUNK_POS_BITS * 4)))
                                     as u32,
-                                id: 1 | ((i as u32) << 16),
+                                id: chunk.get_block_unsafe(
+                                    tz as usize + z * CHUNK_SIZE + y * CHUNK_SIZE * CHUNK_SIZE,
+                                ) as u32
+                                    | ((i as u32) << 16),
                             };
                         } else {
                             point = Vertex {
@@ -240,7 +246,10 @@ impl SendableChunkMesh {
                                     | ((width - 1) << (CHUNK_POS_BITS * 3))
                                     | ((height - 1) << (CHUNK_POS_BITS * 4)))
                                     as u32,
-                                id: 1 | ((i as u32) << 16),
+                                id: chunk.get_block_unsafe(
+                                    tz as usize + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE,
+                                ) as u32
+                                    | ((i as u32) << 16),
                             };
                         }
 
