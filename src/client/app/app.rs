@@ -441,7 +441,10 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                     ui.add_space(10.0);
-                    ui.label(egui::RichText::new("v0.1.0").color(egui::Color32::ORANGE));
+                    ui.label(
+                        egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                            .color(egui::Color32::ORANGE),
+                    );
                     ui.separator();
                 });
             });
