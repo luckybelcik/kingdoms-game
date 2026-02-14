@@ -1,0 +1,17 @@
+[package]
+name = "engine_render"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engine_core = { workspace = true }
+engine_settings = { workspace = true }
+egui = { workspace = true }
+wgpu = { workspace = true }
+egui-wgpu = { workspace = true }
+bytemuck = { workspace = true }
+nalgebra-glm = { workspace = true }
+wgpu_buffer_allocator = { workspace = true }
+image = { workspace = true }
+log = { workspace = true }
+rustc-hash = { workspace = true }

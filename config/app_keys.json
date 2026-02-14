@@ -1,0 +1,6 @@
+{
+  "Escape": "ExitApp",
+  "KeyP": "ToggleTextureRendering",
+  "KeyL": "ToggleLineRendering",
+  "F3": "ToggleDebugUI"
+}

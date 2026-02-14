@@ -1,0 +1,16 @@
+[package]
+name = "engine_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engine_net = { workspace = true }
+engine_core = { workspace = true }
+engine_world = { workspace = true }
+shared_utils = { workspace = true }
+arc-swap = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+nalgebra-glm = { workspace = true }
+rayon = { workspace = true }
+bincode = { workspace = true }

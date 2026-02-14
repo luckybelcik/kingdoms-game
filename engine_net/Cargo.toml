@@ -1,0 +1,13 @@
+[package]
+name = "engine_net"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { workspace = true }
+nalgebra-glm = { workspace = true }
+engine_core = { workspace = true }
+shared_utils = { workspace = true }
+rustc-hash = { workspace = true }
+rand = { workspace = true }
+engine_world = { workspace = true }

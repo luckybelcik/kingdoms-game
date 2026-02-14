@@ -1,0 +1,11 @@
+[package]
+name = "shared_utils"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nalgebra-glm = { workspace = true }
+engine_core = { workspace = true }
+arc-swap = { workspace = true }
+rustc-hash = { workspace = true }
+engine_world = { workspace = true }

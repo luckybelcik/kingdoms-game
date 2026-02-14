@@ -1,0 +1,31 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engine_core = { workspace = true }
+engine_net = { workspace = true }
+engine_server = { workspace = true }
+engine_render = { workspace = true }
+engine_world = { workspace = true }
+shared_utils = { workspace = true }
+engine_settings = { workspace = true }
+winit = { workspace = true }
+wgpu = { workspace = true }
+egui = { workspace = true}
+egui-winit = { workspace = true }
+egui-wgpu = { workspace = true }
+web-time = { workspace = true }
+rayon = { workspace = true }
+bincode = { workspace = true }
+rustc-hash = { workspace = true }
+arc-swap = { workspace = true }
+nalgebra-glm = { workspace = true }
+wgpu_buffer_allocator = { workspace = true }
+bytemuck = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+env_logger = { workspace = true }
+pollster = { workspace = true }
+log = { workspace = true }

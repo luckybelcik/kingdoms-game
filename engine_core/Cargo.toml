@@ -1,0 +1,10 @@
+[package]
+name = "engine_core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+directories = { workspace = true }
+nalgebra-glm = { workspace = true }
+serde = { workspace = true }
+bytemuck = { workspace = true }

@@ -1,0 +1,10 @@
+[package]
+name = "engine_world"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arc-swap = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+engine_core = { workspace = true }
