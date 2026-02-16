@@ -1,4 +1,5 @@
 use egui::{Align2, Color32};
+use engine_assets::AssetManager;
 use engine_core::entity_pos::EntityPos;
 use engine_net::{client_actions::ClientKeybindableActions, player_id::PlayerId};
 use engine_render::{ChunkDrawCommand, render_results::RenderResults, renderer::Renderer};
@@ -34,6 +35,7 @@ use crate::{
 pub struct App {
     window: Option<Arc<Window>>,
     pub renderer: Option<Renderer>,
+    asset_manager: AssetManager,
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub app_info: AppInfo,
@@ -49,6 +51,7 @@ impl App {
         Self {
             window: None,
             renderer: None,
+            asset_manager: AssetManager::init(),
             gui_state: None,
             pressed_keys: Default::default(),
             app_info: Default::default(),
@@ -103,10 +106,12 @@ impl ApplicationHandler for App {
             window_handle.inner_size().height,
         );
 
+        let atlas = &self.asset_manager.atlas;
+
         {
             env_logger::init();
             let renderer = pollster::block_on(async move {
-                Renderer::new(window_handle.clone(), width, height).await
+                Renderer::new(window_handle.clone(), width, height, atlas).await
             });
             self.renderer = Some(renderer);
         }
@@ -250,6 +255,9 @@ impl App {
             }
             AppKeybindableActions::ToggleDebugUI => {
                 self.ui_state.show_ui = !self.ui_state.show_ui;
+            }
+            AppKeybindableActions::ForceCrash => {
+                panic!("Forced crash!");
             }
         }
     }

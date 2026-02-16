@@ -10,6 +10,7 @@ members = [
     "engine_net",
     "engine_settings",
     "shared_utils",
+    "engine_assets",
 ]
 resolver = "2"
 
@@ -38,6 +39,7 @@ rustc-hash = "2.1.1"
 bincode = "1.3.3"
 directories = "6.0.0"
 image = "0.25.9"
+toml = "1.0.2"
 
 engine_core = { path = "engine_core" }
 engine_net = { path = "engine_net" }
@@ -46,6 +48,7 @@ engine_world = { path = "engine_world" }
 engine_settings = { path = "engine_settings" }
 engine_server = { path = "server" }
 shared_utils = { path = "shared_utils" }
+engine_assets = { path = "engine_assets" }
 
 [workspace.features]
 default = ["wgpu/default"]

@@ -11,6 +11,7 @@ engine_render = { workspace = true }
 engine_world = { workspace = true }
 shared_utils = { workspace = true }
 engine_settings = { workspace = true }
+engine_assets = { workspace = true }
 winit = { workspace = true }
 wgpu = { workspace = true }
 egui = { workspace = true}
@@ -29,3 +30,4 @@ serde_json = { workspace = true }
 env_logger = { workspace = true }
 pollster = { workspace = true }
 log = { workspace = true }
+native-dialog = { version = "0.9.6", features = ["async"] }

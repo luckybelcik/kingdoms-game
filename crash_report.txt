@@ -1,0 +1,94 @@
+Kingdoms Game Engine has encountered a critical error. Do you want to print the crash report?
+
+Error: Forced crash!
+Location: File: client/src/app/app.rs, Line: 255
+
+Stacktrace:
+   0: client::app::crash_handler::init::{closure#0}
+             at ./client/src/app/crash_handler.rs:7:25
+   1: <alloc::boxed::Box<dyn for<'a, 'b> core::ops::function::Fn<(&'a std::panic::PanicHookInfo<'b>,), Output = ()> + core::marker::Sync + core::marker::Send> as core::ops::function::Fn<(&std::panic::PanicHookInfo,)>>::call
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/alloc/src/boxed.rs:2220:9
+   2: std::panicking::panic_with_hook
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:833:13
+   3: std::panicking::panic_handler::{closure#0}
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:691:13
+   4: std::sys::backtrace::__rust_end_short_backtrace::<std::panicking::panic_handler::{closure#0}, !>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/sys/backtrace.rs:182:18
+   5: __rustc::rust_begin_unwind
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:689:5
+   6: core::panicking::panic_fmt
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/core/src/panicking.rs:80:14
+   7: <client::app::app::App>::handle_single_press_app_action
+             at ./client/src/app/app.rs:255:17
+   8: <client::app::app::App>::handle_keyboard_input
+             at ./client/src/app/app.rs:211:34
+   9: <client::app::app::App as winit::application::ApplicationHandler>::window_event
+             at ./client/src/app/app.rs:176:22
+  10: winit::event_loop::dispatch_event_for_app::<(), client::app::app::App>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/event_loop.rs:642:56
+  11: <winit::event_loop::EventLoop<()>>::run_app::<client::app::app::App>::{closure#0}
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/event_loop.rs:265:49
+  12: <&mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0} as core::ops::function::FnMut<(winit::event::Event<()>, &winit::event_loop::ActiveEventLoop)>>::call_mut
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:298:21
+  13: <&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0} as core::ops::function::FnMut<(winit::event::Event<()>, &winit::event_loop::ActiveEventLoop)>>::call_mut
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:298:21
+  14: <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events::<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>::{closure#0}
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/mod.rs:594:21
+  15: <&mut <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>::{closure#0} as core::ops::function::FnMut<(&winit::event_loop::ActiveEventLoop, winit::event::Event<()>)>>::call_mut
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:298:21
+  16: <&mut &mut <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>::{closure#0} as core::ops::function::FnMut<(&winit::event_loop::ActiveEventLoop, winit::event::Event<()>)>>::call_mut
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:298:21
+  17: <winit::platform_impl::linux::x11::event_processor::EventProcessor>::xinput_key_input::<(), &mut &mut <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/event_processor.rs:981:17
+  18: <winit::platform_impl::linux::x11::event_processor::EventProcessor>::process_xevent::<(), &mut <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/event_processor.rs:205:22
+  19: <winit::platform_impl::linux::x11::event_processor::EventProcessor>::process_event::<(), <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/event_processor.rs:82:14
+  20: <winit::platform_impl::linux::x11::EventLoop<()>>::drain_events::<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/mod.rs:585:34
+  21: <winit::platform_impl::linux::x11::EventLoop<()>>::single_iteration::<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/mod.rs:521:14
+  22: <winit::platform_impl::linux::x11::EventLoop<()>>::poll_events_with_timeout::<&mut &mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/mod.rs:505:14
+  23: <winit::platform_impl::linux::x11::EventLoop<()>>::pump_events::<&mut <winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/mod.rs:424:18
+  24: <winit::platform_impl::linux::x11::EventLoop<()>>::run_on_demand::<<winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/x11/mod.rs:385:24
+  25: <winit::platform_impl::linux::EventLoop<()>>::run_on_demand::<<winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/mod.rs:820:61
+  26: <winit::platform_impl::linux::EventLoop<()>>::run::<<winit::event_loop::EventLoop<()>>::run_app<client::app::app::App>::{closure#0}>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/platform_impl/linux/mod.rs:813:14
+  27: <winit::event_loop::EventLoop<()>>::run_app::<client::app::app::App>
+             at /home/luckybelcik/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.12/src/event_loop.rs:265:25
+  28: client::main
+             at ./client/src/main.rs:29:16
+  29: <fn() -> core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>> as core::ops::function::FnOnce<()>>::call_once
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
+  30: std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>>, core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>>>
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
+  31: std::rt::lang_start::<core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>>>::{closure#0}
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
+  32: <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/core/src/ops/function.rs:287:21
+  33: std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:581:40
+  34: std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:544:19
+  35: std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panic.rs:359:14
+  36: std::rt::lang_start_internal::{closure#0}
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/rt.rs:175:24
+  37: std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:581:40
+  38: std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panicking.rs:544:19
+  39: std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize>
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/panic.rs:359:14
+  40: std::rt::lang_start_internal
+             at /rustc/fcf67da039f42e3905cf6f69e33304299c45149f/library/std/src/rt.rs:171:5
+  41: std::rt::lang_start::<core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>>>
+             at /home/luckybelcik/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
+  42: main
+  43: __libc_start_call_main
+  44: __libc_start_main_alias_1
+  45: _start

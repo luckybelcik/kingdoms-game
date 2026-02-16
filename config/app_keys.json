@@ -2,5 +2,6 @@
   "Escape": "ExitApp",
   "KeyP": "ToggleTextureRendering",
   "KeyL": "ToggleLineRendering",
-  "F3": "ToggleDebugUI"
+  "F3": "ToggleDebugUI",
+  "F9": "ForceCrash"
 }

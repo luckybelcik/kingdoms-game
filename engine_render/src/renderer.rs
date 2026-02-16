@@ -1,4 +1,5 @@
 use engine_core::entity_pos::EntityPos;
+use image::DynamicImage;
 use nalgebra_glm::Vec3;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
@@ -23,6 +24,7 @@ impl Renderer {
         window: impl Into<wgpu::SurfaceTarget<'static>>,
         width: u32,
         height: u32,
+        atlas: &DynamicImage,
     ) -> Self {
         let gpu = Gpu::new_async(window, width, height).await;
         let depth_texture_view = gpu.create_depth_texture(width, height);
@@ -39,7 +41,7 @@ impl Renderer {
 
         let chunk_ssbo = SSBOAllocator::new(&gpu.device, "Chunk SSBO", 134_217_728);
 
-        let texture_manager = TextureManager::initialize(&gpu.device, &gpu.queue);
+        let texture_manager = TextureManager::initialize(&gpu.device, &gpu.queue, &atlas);
 
         let scene = Scene::new(
             &gpu.device,

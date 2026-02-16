@@ -30,34 +30,12 @@ pub fn init_data_path() -> Result<(), std::io::Error> {
 
         // create files if dont exist
         if !app_key_config.exists() {
-            let default_data = r#"{
-                    "Escape": "ExitApp",
-                    "KeyP": "ToggleTextureRendering",
-                    "KeyL": "ToggleLineRendering",
-                    "F3": "ToggleDebugUI"
-                }"#;
+            let default_data = fs::read("config/app_keys.json").unwrap();
             fs::write(&app_key_config, default_data)?;
         }
 
         if !client_key_config.exists() {
-            let default_data = r#"{
-                    "Comma": "BreakBlock",
-                    "Period": "PlaceBlock",
-                    "KeyW": "MoveForwards",
-                    "KeyS": "MoveBackwards",
-                    "KeyA": "MoveLeft",
-                    "KeyD": "MoveRight",
-                    "Space": "MoveUp",
-                    "ShiftLeft": "MoveDown",
-                    "ArrowUp": "RotateUp",
-                    "ArrowDown": "RotateDown",
-                    "ArrowLeft": "RotateLeft",
-                    "ArrowRight": "RotateRight",
-                    "Equal": "ScrollHotbarRight",
-                    "Minus": "ScrollHotbarLeft",
-                    "KeyI": "RequestServerPlayerData",
-                    "KeyU": "RequestServerChunkInfo"
-                }"#;
+            let default_data = fs::read("config/client_keys.json").unwrap();
             fs::write(&client_key_config, default_data).unwrap();
         }
 

@@ -1,4 +1,4 @@
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView};
 
 use crate::constants::{MIP_LEVELS, TILE_SIZE_PIXELS};
 
@@ -7,13 +7,17 @@ pub struct TextureManager {
 }
 
 impl TextureManager {
-    pub fn initialize(device: &wgpu::Device, queue: &wgpu::Queue) -> TextureManager {
+    pub fn initialize(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        atlas: &DynamicImage,
+    ) -> TextureManager {
         TextureManager {
             main_atlas: Self::create_texture_with_tiled_mips(
                 device,
                 queue,
                 "main_atlas",
-                include_bytes!("../../data/atlas.png"),
+                atlas,
                 MIP_LEVELS,
                 TILE_SIZE_PIXELS,
             ),
@@ -32,11 +36,10 @@ impl TextureManager {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         texture_name: &str,
-        image_bytes: &[u8],
+        image: &DynamicImage,
         mip_levels: u32,
         grid_size: u32,
     ) -> LocalTexture {
-        let image = image::load_from_memory(image_bytes).unwrap();
         let rgba_image = image.to_rgba8();
         let dimensions = image.dimensions();
 

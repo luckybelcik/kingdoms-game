@@ -192,7 +192,7 @@ let render_textures = bool(push.app_render_config & 1);
     if !render_textures {
         color = vec4<f32>(in.debug_color, 1.0);
     } else {
-        let atlas_tile_size = 0.25;
+        let atlas_tile_size = 0.5;
         let ddx = dpdx(in.uv);
         let ddy = dpdy(in.uv);
         let local_uv = in.uv % atlas_tile_size;

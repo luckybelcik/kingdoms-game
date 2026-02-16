@@ -4,7 +4,7 @@ use winit::error::EventLoopError;
 use winit::platform::x11::EventLoopBuilderExtX11;
 
 use crate::{
-    app::app::App,
+    app::{app::App, crash_handler},
     connection_details::{ClientConnectionType, LocalConnectionDetails},
 };
 
@@ -13,6 +13,7 @@ pub mod client;
 pub mod connection_details;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    crash_handler::init();
     engine_core::paths::init_data_path()?;
 
     let player_id = PlayerId::new();
