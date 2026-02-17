@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer};
+use image::{DynamicImage, GenericImage, GenericImageView};
 
 use crate::block_registry::BlockRegistry;
 
@@ -12,17 +12,19 @@ pub mod manifest;
 pub struct AssetManager {
     pub block_registry: BlockRegistry,
     pub atlas: DynamicImage,
+    pub texture_mapping_table: Vec<u32>,
 }
 
 impl AssetManager {
     pub fn init() -> AssetManager {
-        let (registry, texture_paths) = BlockRegistry::init_with_textures();
+        let (registry, texture_paths, mapping_table) = BlockRegistry::init(true);
 
         let atlas = create_texture_atlas(&texture_paths);
 
         AssetManager {
             block_registry: registry,
             atlas,
+            texture_mapping_table: mapping_table,
         }
     }
 }

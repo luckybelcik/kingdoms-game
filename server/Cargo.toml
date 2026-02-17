@@ -8,6 +8,7 @@ engine_net = { workspace = true }
 engine_core = { workspace = true }
 engine_world = { workspace = true }
 shared_utils = { workspace = true }
+engine_assets = { workspace = true }
 arc-swap = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }

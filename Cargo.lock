@@ -1039,6 +1039,7 @@ version = "0.1.0"
 dependencies = [
  "arc-swap",
  "bincode",
+ "engine_assets",
  "engine_core",
  "engine_net",
  "engine_world",

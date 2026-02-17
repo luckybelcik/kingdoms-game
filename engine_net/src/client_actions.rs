@@ -74,6 +74,7 @@ impl ClientKeybindableActions {
 pub enum PlayerActions {
     BreakBlock(Vec3, EntityPos),
     PlaceBlock(Vec3, EntityPos),
+    ChangeSelectedBlock(String),
     MoveForwards(Vec3),
     MoveBackwards(Vec3),
     MoveLeft(Vec3),

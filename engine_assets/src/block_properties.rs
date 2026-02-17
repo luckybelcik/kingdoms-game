@@ -7,7 +7,7 @@ pub struct BlockProperties {
 impl From<BlockDefinition> for BlockProperties {
     fn from(definition: BlockDefinition) -> Self {
         BlockProperties {
-            display_name: definition.texture_name,
+            display_name: definition.id,
         }
     }
 }

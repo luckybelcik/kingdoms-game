@@ -21,6 +21,7 @@ impl Renderer {
         width: u32,
         height: u32,
         atlas: &DynamicImage,
+        texture_mapping_table: &Vec<u32>,
     ) -> Self {
         let gpu = Gpu::new_async(window, width, height).await;
         let depth_texture_view = gpu.create_depth_texture(width, height);
@@ -43,6 +44,7 @@ impl Renderer {
             gpu.surface_format,
             chunk_ssbo.get_buffer(),
             atlas,
+            texture_mapping_table,
         );
 
         Self {

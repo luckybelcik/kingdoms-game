@@ -5,7 +5,10 @@ use engine_core::entity_pos::EntityPos;
 use engine_settings::client_config::render_config::{RenderConfig, RenderFlags};
 use image::DynamicImage;
 use nalgebra_glm::Vec3;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{
+    BindGroup,
+    util::{BufferInitDescriptor, DeviceExt},
+};
 
 use crate::{
     ChunkDrawCommand, GlobalUniformData, GlobalUniforms, push_constants::PushConstants,
@@ -23,6 +26,7 @@ pub struct Scene {
     chunk_ssbo_bind_group: wgpu::BindGroup,
     texture_manager: TextureManager,
     global_uniforms: GlobalUniforms,
+    texture_mapping_bind_group: wgpu::BindGroup,
 }
 
 impl Scene {
@@ -32,15 +36,22 @@ impl Scene {
         surface_format: wgpu::TextureFormat,
         chunk_ssbo: &wgpu::Buffer,
         atlas: &DynamicImage,
+        texture_mapping_table: &Vec<u32>,
     ) -> Self {
         let ssbo_layout = get_chunk_ssbo_layout(device);
         let texture_manager = TextureManager::initialize(device, queue, atlas);
         let atlas_layout = texture_manager.get_main_atlas_bind_group_layout();
         let global_uniforms = GlobalUniforms::new(device);
+        let (mapping_layout, mapping_bind_group) = init_mapping(device, texture_mapping_table);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Scene Pipeline Layout"),
-            bind_group_layouts: &[&ssbo_layout, atlas_layout, &global_uniforms.layout],
+            bind_group_layouts: &[
+                &ssbo_layout,
+                atlas_layout,
+                &global_uniforms.layout,
+                &mapping_layout,
+            ],
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
@@ -96,6 +107,7 @@ impl Scene {
             chunk_ssbo_bind_group,
             texture_manager,
             global_uniforms,
+            texture_mapping_bind_group: mapping_bind_group,
         }
     }
 }
@@ -180,6 +192,8 @@ impl Scene {
 
         renderpass.set_bind_group(2, &self.global_uniforms.bind_group, &[]);
 
+        renderpass.set_bind_group(3, &self.texture_mapping_bind_group, &[]);
+
         PushConstants::update_render_config(renderpass);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -245,4 +259,40 @@ fn get_chunk_ssbo_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             count: None,
         }],
     })
+}
+
+fn init_mapping(
+    device: &wgpu::Device,
+    mapping_table: &Vec<u32>,
+) -> (wgpu::BindGroupLayout, BindGroup) {
+    let mapping_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Texture Mapping Storage Buffer"),
+        contents: bytemuck::cast_slice(mapping_table),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+
+    let mapping_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Texture Mapping Layout"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+    });
+
+    let mapping_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Texture Mapping Bind Group"),
+        layout: &mapping_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: mapping_buffer.as_entire_binding(),
+        }],
+    });
+
+    (mapping_layout, mapping_bind_group)
 }

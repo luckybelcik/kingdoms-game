@@ -8,6 +8,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
+use engine_assets::block_registry::BlockRegistry;
 use engine_core::{chunk_pos::ChunkPos, entity_pos::EntityPos};
 use engine_net::{
     client_actions::PlayerActions,
@@ -27,6 +28,7 @@ use crate::prioritized_job::PrioritizedJob;
 pub type GeneratedChunk = (ChunkPos, Chunk);
 
 pub struct Server {
+    pub block_registry: BlockRegistry,
     pub chunks: FxHashMap<ChunkPos, ArcSwap<Chunk>>,
     pub dirty_chunks: FxHashSet<ChunkPos>,
     pub generating_chunks: FxHashSet<ChunkPos>,
@@ -71,6 +73,7 @@ impl Server {
             .unwrap();
 
         Self {
+            block_registry: BlockRegistry::init(false).0,
             chunks: FxHashMap::default(),
             dirty_chunks: FxHashSet::default(),
             generating_chunks: FxHashSet::default(),
@@ -196,6 +199,11 @@ impl Server {
                                     chunk.store(Arc::new(new_client_chunk));
                                 }
                             }
+                        }
+                    }
+                    PlayerActions::ChangeSelectedBlock(block_id) => {
+                        if let Some(id) = self.block_registry.get_block(&block_id) {
+                            player_data.selected_block = *id;
                         }
                     }
                     PlayerActions::MoveForwards(rot) => {

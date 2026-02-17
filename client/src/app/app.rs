@@ -1,7 +1,11 @@
 use egui::{Align2, Color32};
 use engine_assets::AssetManager;
 use engine_core::entity_pos::EntityPos;
-use engine_net::{client_actions::ClientKeybindableActions, player_id::PlayerId};
+use engine_net::{
+    client_actions::{ClientKeybindableActions, PlayerActions},
+    client_packet::{ClientAction, ClientPacket},
+    player_id::PlayerId,
+};
 use engine_render::{ChunkDrawCommand, render_results::RenderResults, renderer::Renderer};
 use engine_settings::client_config::{
     mesh_config::{MeshConfig, MeshFlags},
@@ -109,11 +113,12 @@ impl ApplicationHandler for App {
         );
 
         let atlas = &self.asset_manager.atlas;
+        let texture_mapping = &self.asset_manager.texture_mapping_table;
 
         {
             env_logger::init();
             let renderer = pollster::block_on(async move {
-                Renderer::new(window_handle.clone(), width, height, atlas).await
+                Renderer::new(window_handle.clone(), width, height, atlas, texture_mapping).await
             });
             self.renderer = Some(renderer);
         }
@@ -415,6 +420,24 @@ impl App {
 }
 
 fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
+    let mut selected_block_string = "";
+    let mut selected_block_id = 0;
+    let block_list = app.asset_manager.block_registry.get_all_blocks();
+
+    if let Some(client) = &app.client {
+        if let Some(player_data) = client.get_plater_data() {
+            selected_block_id = player_data.selected_block;
+            selected_block_string = block_list
+                .iter()
+                .find(|(_, id)| **id + 1 == selected_block_id)
+                .map(|(name, _)| name.as_str())
+                .unwrap_or("Unknown");
+        }
+    }
+
+    let mut new_block = selected_block_id;
+    let mut new_block_string = selected_block_string;
+
     let ctx = app.gui_state.as_mut().unwrap().egui_ctx();
     let mode;
     let mode_color;
@@ -484,6 +507,25 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
 
         egui::SidePanel::left("left").show(ctx, |ui| {
             ui.heading("Scene Tree");
+            ui.separator();
+            ui.heading("Block Picker");
+
+            egui::ComboBox::from_label("Select Block")
+                .selected_text(selected_block_string)
+                .show_ui(ui, |ui| {
+                    for (name, id) in block_list {
+                        if ui
+                            .selectable_value(&mut selected_block_id, *id + 1, name)
+                            .clicked()
+                        {
+                            new_block = *id + 1;
+                            new_block_string = name;
+                        };
+                    }
+                });
+
+            ui.separator();
+            ui.label(format!("Current ID: {}", selected_block_id));
         });
 
         egui::SidePanel::right("right").show(ctx, |ui| {
@@ -696,6 +738,19 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
 
         if let Some(state) = state_to_set_to {
             app.ui_state.popup_window = state;
+        }
+
+        if let Some(client) = &mut app.client {
+            if let Some(player_data) = client.get_plater_data_mut() {
+                player_data.selected_block = new_block;
+            }
+
+            client.send_packet(ClientPacket {
+                player_id: client.get_player_id(),
+                action: ClientAction::PlayerAction(PlayerActions::ChangeSelectedBlock(
+                    new_block_string.to_string(),
+                )),
+            });
         }
     }
 }

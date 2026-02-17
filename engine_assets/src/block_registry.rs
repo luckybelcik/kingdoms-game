@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     block_properties::BlockProperties,
-    manifest::{BlockDefinition, BlockManifest},
+    manifest::{BlockDefinition, BlockManifest, TextureValue},
 };
 
 #[derive(Default)]
@@ -16,9 +16,14 @@ pub struct BlockRegistry {
 }
 
 impl BlockRegistry {
-    pub fn init_with_textures() -> (BlockRegistry, Vec<PathBuf>) {
+    pub fn init(include_assets: bool) -> (BlockRegistry, Vec<PathBuf>, Vec<u32>) {
         let mut registry = BlockRegistry::default();
         let mut texture_queue = Vec::new();
+        let mut texture_to_id = std::collections::HashMap::new();
+        let mut mapping_table = Vec::new();
+
+        // breathe air
+        mapping_table.extend_from_slice(&[0; 6]);
 
         let namespaces = discover_namespaces(DATA_DIR.get().cloned().unwrap());
 
@@ -39,14 +44,41 @@ impl BlockRegistry {
                     format!("{}:{}", ns.0, block.id)
                 };
 
-                let tex_path = ns.1.join("textures/blocks").join(&block.texture_name);
-                texture_queue.push(tex_path);
+                if include_assets {
+                    let face_textures = match &block.texture {
+                        TextureValue::Simple(path) => [
+                            path.clone(),
+                            path.clone(),
+                            path.clone(),
+                            path.clone(),
+                            path.clone(),
+                            path.clone(),
+                        ],
+                        TextureValue::Complex(texture_config) => texture_config.resolve_faces(),
+                    };
+
+                    for tex_name in face_textures {
+                        let full_tex_path = ns.1.join("textures/blocks").join(tex_name);
+
+                        let atlas_index = *texture_to_id
+                            .entry(full_tex_path.clone())
+                            .or_insert_with(|| {
+                                let idx = texture_queue.len() as u32;
+                                texture_queue.push(full_tex_path);
+                                idx
+                            });
+
+                        mapping_table.push(atlas_index);
+                    }
+                }
 
                 registry.register_block(full_id, block);
             }
         }
 
-        (registry, texture_queue)
+        println!("Mapping table: {:?}", mapping_table);
+
+        (registry, texture_queue, mapping_table)
     }
 
     pub fn register_block(&mut self, id: String, block_definition: BlockDefinition) {
@@ -57,6 +89,14 @@ impl BlockRegistry {
         self.properties.push(block_properties);
         self.id_to_name.push(id.clone());
         self.name_to_id.insert(id, self.properties.len() as u16 - 1);
+    }
+
+    pub fn get_all_blocks(&self) -> Vec<(&String, &u16)> {
+        self.name_to_id.iter().collect()
+    }
+
+    pub fn get_block(&self, name_id: &String) -> Option<&u16> {
+        self.name_to_id.get(name_id)
     }
 }
 

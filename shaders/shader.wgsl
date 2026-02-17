@@ -23,6 +23,9 @@ struct GlobalUniforms {
 @group(2) @binding(0)
 var<uniform> globals: GlobalUniforms;
 
+@group(3) @binding(0)
+var<storage, read> texture_mappings: array<u32>;
+
 struct PushConstants {
     pv: mat4x4<f32>,
     app_render_config: u32,
@@ -182,8 +185,10 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
     let atlas_dim: f32 = f32(globals.atlas_size) / 16.0;
     let inv_atlas_dim: f32 = 1.0 / atlas_dim;
 
-    let u_idx = f32((block_id - 1) % u32(atlas_dim));
-    let v_idx = f32((block_id - 1) / u32(atlas_dim));
+    let atlas_index = texture_mappings[((block_id) * 6u) + face_normal];
+
+    let u_idx = f32((atlas_index) % u32(atlas_dim));
+    let v_idx = f32((atlas_index) / u32(atlas_dim));
     let base_uv = vec2<f32>(u_idx, v_idx) * inv_atlas_dim;
 
     out.uv = local_uv * inv_atlas_dim;
@@ -196,11 +201,12 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
 let render_textures = bool(push.app_render_config & 1);
     var color: vec4<f32>;
+    let atlas_dim: f32 = f32(globals.atlas_size) / 16.0;
 
     if !render_textures {
         color = vec4<f32>(in.debug_color, 1.0);
     } else {
-        let atlas_tile_size = 0.5;
+        let atlas_tile_size = 1.0 / atlas_dim;
         let ddx = dpdx(in.uv);
         let ddy = dpdy(in.uv);
         let local_uv = in.uv % atlas_tile_size;

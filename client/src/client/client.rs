@@ -63,6 +63,14 @@ impl Client {
         self.player_id.clone()
     }
 
+    pub fn get_plater_data(&self) -> &Option<ClientPlayerData> {
+        &self.player_data
+    }
+
+    pub fn get_plater_data_mut(&mut self) -> &mut Option<ClientPlayerData> {
+        &mut self.player_data
+    }
+
     pub fn handle_tickless_actions(
         &mut self,
         scheduled_actions: &mut Vec<ClientKeybindableActions>,
