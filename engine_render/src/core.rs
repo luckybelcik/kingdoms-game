@@ -1,3 +1,5 @@
+use std::fs;
+
 use engine_core::entity_pos::EntityPos;
 #[cfg(debug_assertions)]
 use engine_settings::client_config::render_config::{RenderConfig, RenderFlags};
@@ -128,7 +130,8 @@ impl Scene {
         surface_format: wgpu::TextureFormat,
         texture_manager: &TextureManager,
     ) -> wgpu::RenderPipeline {
-        let shader_source = include_str!("../shaders/shader.wgsl");
+        let shader_source =
+            fs::read_to_string("shaders/shader.wgsl").expect("Failed to parse shader.");
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -195,7 +198,8 @@ impl Scene {
         surface_format: wgpu::TextureFormat,
         texture_manager: &TextureManager,
     ) -> wgpu::RenderPipeline {
-        let shader_source = include_str!("../shaders/shader.wgsl");
+        let shader_source =
+            fs::read_to_string("shaders/shader.wgsl").expect("Failed to parse shader.");
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,

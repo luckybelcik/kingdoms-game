@@ -171,11 +171,11 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 
     stretched_quad_pos.y = (quad_pos.y * w) - (w - 1.0);
 
-    let atlas_dim: f32 = 4.0;
+    let atlas_dim: f32 = 2.0;
     let inv_atlas_dim: f32 = 1.0 / atlas_dim;
 
-    let u_idx = f32((block_id - 1) % 4u);
-    let v_idx = f32((block_id - 1) / 4u);
+    let u_idx = f32((block_id - 1) % 2u);
+    let v_idx = f32((block_id - 1) / 2u);
     let base_uv = vec2<f32>(u_idx, v_idx) * inv_atlas_dim;
 
     out.uv = local_uv * inv_atlas_dim;
