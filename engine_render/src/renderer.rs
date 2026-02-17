@@ -3,10 +3,7 @@ use image::DynamicImage;
 use nalgebra_glm::Vec3;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
-use crate::{
-    ChunkDrawCommand, core::Scene, gpu::Gpu, render_results::RenderResults,
-    texture_manager::TextureManager,
-};
+use crate::{ChunkDrawCommand, gpu::Gpu, render_results::RenderResults, scene::Scene};
 
 pub struct Renderer {
     pub gpu: Gpu,
@@ -14,7 +11,6 @@ pub struct Renderer {
     egui_renderer: egui_wgpu::Renderer,
     scene: Scene,
     pub chunk_ssbo: SSBOAllocator,
-    texture_manager: TextureManager,
 }
 
 impl Renderer {
@@ -41,13 +37,12 @@ impl Renderer {
 
         let chunk_ssbo = SSBOAllocator::new(&gpu.device, "Chunk SSBO", 134_217_728);
 
-        let texture_manager = TextureManager::initialize(&gpu.device, &gpu.queue, &atlas);
-
         let scene = Scene::new(
             &gpu.device,
+            &gpu.queue,
             gpu.surface_format,
             chunk_ssbo.get_buffer(),
-            &texture_manager,
+            atlas,
         );
 
         Self {
@@ -56,7 +51,6 @@ impl Renderer {
             egui_renderer,
             scene,
             chunk_ssbo,
-            texture_manager,
         }
     }
 
@@ -161,12 +155,6 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-
-            render_pass.set_bind_group(
-                1,
-                Some(self.texture_manager.get_main_atlas_bind_group()),
-                &[],
-            );
 
             results = self.scene.render(
                 &mut render_pass,
