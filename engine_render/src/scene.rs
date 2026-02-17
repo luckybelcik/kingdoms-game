@@ -8,8 +8,9 @@ use nalgebra_glm::Vec3;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use crate::{
-    ChunkDrawCommand, push_constants::PushConstants, render_results::RenderResults,
-    renderer::Renderer, texture_manager::TextureManager, vertex::Vertex,
+    ChunkDrawCommand, GlobalUniformData, GlobalUniforms, push_constants::PushConstants,
+    render_results::RenderResults, renderer::Renderer, texture_manager::TextureManager,
+    vertex::Vertex,
 };
 
 const QUAD_INDICES: &[u32] = &[0, 2, 1, 2, 3, 1];
@@ -21,6 +22,7 @@ pub struct Scene {
     shared_quad_ibo: wgpu::Buffer,
     chunk_ssbo_bind_group: wgpu::BindGroup,
     texture_manager: TextureManager,
+    global_uniforms: GlobalUniforms,
 }
 
 impl Scene {
@@ -34,10 +36,11 @@ impl Scene {
         let ssbo_layout = get_chunk_ssbo_layout(device);
         let texture_manager = TextureManager::initialize(device, queue, atlas);
         let atlas_layout = texture_manager.get_main_atlas_bind_group_layout();
+        let global_uniforms = GlobalUniforms::new(device);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Scene Pipeline Layout"),
-            bind_group_layouts: &[&ssbo_layout, atlas_layout],
+            bind_group_layouts: &[&ssbo_layout, atlas_layout, &global_uniforms.layout],
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
@@ -92,6 +95,7 @@ impl Scene {
             shared_quad_ibo,
             chunk_ssbo_bind_group,
             texture_manager,
+            global_uniforms,
         }
     }
 }
@@ -174,6 +178,8 @@ impl Scene {
             &[],
         );
 
+        renderpass.set_bind_group(2, &self.global_uniforms.bind_group, &[]);
+
         PushConstants::update_render_config(renderpass);
 
         renderpass.set_index_buffer(self.shared_quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -214,8 +220,14 @@ impl Scene {
         results
     }
 
-    pub fn update(&mut self, _queue: &wgpu::Queue) {
-        // this method will be used later for the SSBO
+    pub fn update(&mut self, queue: &wgpu::Queue, time: f32) {
+        let data = GlobalUniformData {
+            atlas_size: self.texture_manager.get_texture_size().1,
+            time,
+            _padding: [0.0; 2],
+        };
+
+        self.global_uniforms.update(queue, &data);
     }
 }
 

@@ -44,6 +44,7 @@ pub struct App {
     client: Option<Client>,
     input_handler: Option<InputHandler>,
     scheduled_client_bindable_actions: Vec<ClientKeybindableActions>,
+    start_time: Option<Instant>,
 }
 
 impl App {
@@ -60,6 +61,7 @@ impl App {
             client: Some(Client::create(player_id, connection_type)),
             input_handler: Some(InputHandler::new()),
             scheduled_client_bindable_actions: Vec::new(),
+            start_time: Some(Instant::now()),
         }
     }
 }
@@ -407,6 +409,7 @@ impl App {
             &camera_rot,
             &draw_commands,
             textures_delta,
+            self.start_time.unwrap().elapsed().as_secs_f32(),
         );
     }
 }

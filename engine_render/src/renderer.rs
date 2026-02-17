@@ -67,8 +67,9 @@ impl Renderer {
         camera_rot: &Vec3,
         draw_commands: &Vec<ChunkDrawCommand>,
         textures_delta: egui::TexturesDelta,
+        total_time: f32,
     ) -> RenderResults {
-        self.scene.update(&self.gpu.queue);
+        self.scene.update(&self.gpu.queue, total_time);
 
         for (id, image_delta) in &textures_delta.set {
             self.egui_renderer

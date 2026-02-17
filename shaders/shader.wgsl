@@ -10,10 +10,18 @@ struct Vertex {
     block_id: u32,
 }
 
+struct GlobalUniforms {
+    atlas_size: u32,
+    time: f32,
+};
+
 @group(0) @binding(0) var<storage, read> chunk_SSBO: array<u32>;
 
 @group(1) @binding(0) var t_diffuse: texture_2d<f32>;
 @group(1) @binding(1) var s_diffuse: sampler;
+
+@group(2) @binding(0)
+var<uniform> globals: GlobalUniforms;
 
 struct PushConstants {
     pv: mat4x4<f32>,
@@ -171,11 +179,11 @@ fn vertex_main(in: VertexInput) -> VertexOutput {
 
     stretched_quad_pos.y = (quad_pos.y * w) - (w - 1.0);
 
-    let atlas_dim: f32 = 2.0;
+    let atlas_dim: f32 = f32(globals.atlas_size) / 16.0;
     let inv_atlas_dim: f32 = 1.0 / atlas_dim;
 
-    let u_idx = f32((block_id - 1) % 2u);
-    let v_idx = f32((block_id - 1) / 2u);
+    let u_idx = f32((block_id - 1) % u32(atlas_dim));
+    let v_idx = f32((block_id - 1) / u32(atlas_dim));
     let base_uv = vec2<f32>(u_idx, v_idx) * inv_atlas_dim;
 
     out.uv = local_uv * inv_atlas_dim;

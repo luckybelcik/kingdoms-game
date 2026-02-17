@@ -32,6 +32,10 @@ impl TextureManager {
         &self.main_atlas.layout
     }
 
+    pub fn get_texture_size(&self) -> (u32, u32) {
+        self.main_atlas.dims
+    }
+
     fn create_texture_with_tiled_mips(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -174,11 +178,16 @@ impl TextureManager {
             label: Some(&format!("{}_bind_group", texture_name)),
         });
 
-        LocalTexture { bind_group, layout }
+        LocalTexture {
+            bind_group,
+            layout,
+            dims: dimensions,
+        }
     }
 }
 
 pub struct LocalTexture {
     pub bind_group: wgpu::BindGroup,
     pub layout: wgpu::BindGroupLayout,
+    pub dims: (u32, u32),
 }
