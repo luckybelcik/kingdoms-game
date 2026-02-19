@@ -112,13 +112,26 @@ impl ApplicationHandler for App {
             window_handle.inner_size().height,
         );
 
-        let atlas = &self.asset_manager.atlas;
+        let block_atlas = &self.asset_manager.block_atlas;
+        let mask_atlas = &self.asset_manager.block_colormap_mask_atlas;
+        let colormaps = &self.asset_manager.colormap_textures;
         let texture_mapping = &self.asset_manager.texture_mapping_table;
+        let metadata_table = &self.asset_manager.metadata_table;
 
         {
             env_logger::init();
             let renderer = pollster::block_on(async move {
-                Renderer::new(window_handle.clone(), width, height, atlas, texture_mapping).await
+                Renderer::new(
+                    window_handle.clone(),
+                    width,
+                    height,
+                    block_atlas,
+                    mask_atlas,
+                    colormaps,
+                    texture_mapping,
+                    metadata_table,
+                )
+                .await
             });
             self.renderer = Some(renderer);
         }

@@ -1,5 +1,6 @@
+use engine_assets::rendering::TextureMetadata;
 use engine_core::entity_pos::EntityPos;
-use image::DynamicImage;
+use image::{DynamicImage, GrayImage};
 use nalgebra_glm::Vec3;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
 
@@ -20,8 +21,11 @@ impl Renderer {
         window: impl Into<wgpu::SurfaceTarget<'static>>,
         width: u32,
         height: u32,
-        atlas: &DynamicImage,
+        block_atlas: &DynamicImage,
+        mask_atlas: &GrayImage,
+        colormaps: &Vec<DynamicImage>,
         texture_mapping_table: &Vec<u32>,
+        metadata_table: &Vec<TextureMetadata>,
     ) -> Self {
         let gpu = Gpu::new_async(window, width, height).await;
         let depth_texture_view = gpu.create_depth_texture(width, height);
@@ -43,8 +47,11 @@ impl Renderer {
             &gpu.queue,
             gpu.surface_format,
             chunk_ssbo.get_buffer(),
-            atlas,
+            block_atlas,
+            mask_atlas,
+            colormaps,
             texture_mapping_table,
+            metadata_table,
         );
 
         Self {

@@ -1,9 +1,10 @@
 use std::fs;
 
-use engine_core::entity_pos::EntityPos;
+use engine_assets::rendering::TextureMetadata;
+use engine_core::{entity_pos::EntityPos, paths::DATA_DIR};
 #[cfg(debug_assertions)]
 use engine_settings::client_config::render_config::{RenderConfig, RenderFlags};
-use image::DynamicImage;
+use image::{DynamicImage, GrayImage};
 use nalgebra_glm::Vec3;
 use wgpu::{
     BindGroup,
@@ -27,6 +28,7 @@ pub struct Scene {
     texture_manager: TextureManager,
     global_uniforms: GlobalUniforms,
     texture_mapping_bind_group: wgpu::BindGroup,
+    metadata_bind_group: wgpu::BindGroup,
 }
 
 impl Scene {
@@ -35,27 +37,44 @@ impl Scene {
         queue: &wgpu::Queue,
         surface_format: wgpu::TextureFormat,
         chunk_ssbo: &wgpu::Buffer,
-        atlas: &DynamicImage,
+        block_atlas: &DynamicImage,
+        mask_atlas: &GrayImage,
+        colormaps: &Vec<DynamicImage>,
         texture_mapping_table: &Vec<u32>,
+        metadata_table: &Vec<TextureMetadata>,
     ) -> Self {
         let ssbo_layout = get_chunk_ssbo_layout(device);
-        let texture_manager = TextureManager::initialize(device, queue, atlas);
-        let atlas_layout = texture_manager.get_main_atlas_bind_group_layout();
+        let texture_manager =
+            TextureManager::initialize(device, queue, block_atlas, mask_atlas, colormaps);
         let global_uniforms = GlobalUniforms::new(device);
         let (mapping_layout, mapping_bind_group) = init_mapping(device, texture_mapping_table);
+        let (metadata_layout, metadata_bind_group) = init_texture_metadata(device, metadata_table);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Scene Pipeline Layout"),
             bind_group_layouts: &[
                 &ssbo_layout,
-                atlas_layout,
+                &texture_manager.block_atlas.layout,
                 &global_uniforms.layout,
                 &mapping_layout,
+                &texture_manager.colormap_mask_atlas.layout,
+                &texture_manager.colormap_array.layout,
+                &metadata_layout,
             ],
             push_constant_ranges: &[PushConstants::get_range()],
         });
 
-        let shader_source = fs::read_to_string("shaders/shader.wgsl").expect("Missing shader");
+        let shader_source = fs::read_to_string("shaders/shader.wgsl")
+            .or_else(|e| {
+                let path = DATA_DIR
+                    .get()
+                    .cloned()
+                    .unwrap()
+                    .join("native/shaders/shader.wgsl");
+                fs::read_to_string(path)
+            })
+            .expect("Couldn't find native main shader");
+
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Main Shader"),
             source: wgpu::ShaderSource::Wgsl(shader_source.into()),
@@ -108,6 +127,7 @@ impl Scene {
             texture_manager,
             global_uniforms,
             texture_mapping_bind_group: mapping_bind_group,
+            metadata_bind_group,
         }
     }
 }
@@ -184,15 +204,17 @@ impl Scene {
 
         renderpass.set_bind_group(0, &self.chunk_ssbo_bind_group, &[]);
 
-        renderpass.set_bind_group(
-            1,
-            Some(self.texture_manager.get_main_atlas_bind_group()),
-            &[],
-        );
+        renderpass.set_bind_group(1, Some(&self.texture_manager.block_atlas.bind_group), &[]);
 
         renderpass.set_bind_group(2, &self.global_uniforms.bind_group, &[]);
 
         renderpass.set_bind_group(3, &self.texture_mapping_bind_group, &[]);
+
+        renderpass.set_bind_group(4, &self.texture_manager.colormap_mask_atlas.bind_group, &[]);
+
+        renderpass.set_bind_group(5, &self.texture_manager.colormap_array.bind_group, &[]);
+
+        renderpass.set_bind_group(6, &self.metadata_bind_group, &[]);
 
         PushConstants::update_render_config(renderpass);
 
@@ -236,7 +258,7 @@ impl Scene {
 
     pub fn update(&mut self, queue: &wgpu::Queue, time: f32) {
         let data = GlobalUniformData {
-            atlas_size: self.texture_manager.get_texture_size().1,
+            atlas_size: self.texture_manager.block_atlas.dims.1,
             time,
             _padding: [0.0; 2],
         };
@@ -295,4 +317,40 @@ fn init_mapping(
     });
 
     (mapping_layout, mapping_bind_group)
+}
+
+fn init_texture_metadata(
+    device: &wgpu::Device,
+    metadata_table: &Vec<TextureMetadata>,
+) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Texture Metadata Storage Buffer"),
+        contents: bytemuck::cast_slice(metadata_table),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Texture Metadata Layout"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Texture Metadata Bind Group"),
+        layout: &layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+    });
+
+    (layout, bind_group)
 }

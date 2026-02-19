@@ -1,11 +1,19 @@
-use std::{fs, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use engine_core::paths::DATA_DIR;
-use rustc_hash::FxHashMap;
+use image::GrayImage;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     block_properties::BlockProperties,
-    manifest::{BlockDefinition, BlockManifest, TextureValue},
+    colormap_registry::ColormapRegistry,
+    manifest::{BlockDefinition, BlockManifest, ColormapConfig, FaceConfig, TextureValue},
+    rendering::{TextureMetadata, pack_colormap_ids, pack_sources},
 };
 
 #[derive(Default)]
@@ -16,14 +24,31 @@ pub struct BlockRegistry {
 }
 
 impl BlockRegistry {
-    pub fn init(include_assets: bool) -> (BlockRegistry, Vec<PathBuf>, Vec<u32>) {
+    pub fn init(
+        include_assets: bool,
+    ) -> (
+        BlockRegistry,
+        Vec<PathBuf>,
+        Vec<GrayImage>,
+        BTreeSet<PathBuf>,
+        Vec<u32>,
+        Vec<TextureMetadata>,
+        Option<ColormapRegistry>,
+    ) {
         let mut registry = BlockRegistry::default();
-        let mut texture_queue = Vec::new();
-        let mut texture_to_id = std::collections::HashMap::new();
-        let mut mapping_table = Vec::new();
+        let mut block_texture_queue = Vec::new();
+        let mut block_colormap_mask_texture_queue = Vec::new();
+        let mut colormap_queue = BTreeSet::default();
+        let mut texture_to_id = FxHashMap::default();
+        let mut mask_to_id: FxHashMap<Vec<u8>, i32> = FxHashMap::default();
+        // facedir + blockid -> textureid
+        let mut texture_mapping_table = Vec::new();
+        // textureid -> texture metadata
+        let mut metadata_mapping_table = Vec::new();
+        let mut colormap_registry = ColormapRegistry::default(); // technically obsolete if not including assets but whatever
 
         // breathe air
-        mapping_table.extend_from_slice(&[0; 6]);
+        texture_mapping_table.extend_from_slice(&[0; 6]);
 
         let namespaces = discover_namespaces(DATA_DIR.get().cloned().unwrap());
 
@@ -47,28 +72,75 @@ impl BlockRegistry {
                 if include_assets {
                     let face_textures = match &block.texture {
                         TextureValue::Simple(path) => [
-                            path.clone(),
-                            path.clone(),
-                            path.clone(),
-                            path.clone(),
-                            path.clone(),
-                            path.clone(),
+                            FaceConfig::simple_from_path(path),
+                            FaceConfig::simple_from_path(path),
+                            FaceConfig::simple_from_path(path),
+                            FaceConfig::simple_from_path(path),
+                            FaceConfig::simple_from_path(path),
+                            FaceConfig::simple_from_path(path),
                         ],
                         TextureValue::Complex(texture_config) => texture_config.resolve_faces(),
                     };
 
-                    for tex_name in face_textures {
-                        let full_tex_path = ns.1.join("textures/blocks").join(tex_name);
+                    for face_config in face_textures {
+                        let full_tex_path =
+                            ns.1.join("textures/blocks").join(face_config.path.clone());
 
                         let atlas_index = *texture_to_id
                             .entry(full_tex_path.clone())
                             .or_insert_with(|| {
-                                let idx = texture_queue.len() as u32;
-                                texture_queue.push(full_tex_path);
+                                let idx = block_texture_queue.len() as u32;
+                                block_texture_queue.push(full_tex_path.clone());
                                 idx
                             });
 
-                        mapping_table.push(atlas_index);
+                        texture_mapping_table.push(atlas_index);
+
+                        let mask_atlas_idx = if face_config.colormap0.is_some()
+                            || face_config.colormap1.is_some()
+                            || face_config.colormap2.is_some()
+                        {
+                            let block_path = ns.1.join("textures/blocks");
+                            let m0 = load_gray_or_empty(&face_config.colormap0, &block_path);
+                            let m1 = load_gray_or_empty(&face_config.colormap1, &block_path);
+                            let m2 = load_gray_or_empty(&face_config.colormap2, &block_path);
+
+                            let packed_mask = blend_masks(&m0, &m1, &m2);
+                            let raw_bytes = packed_mask.as_raw().clone();
+
+                            *mask_to_id.entry(raw_bytes).or_insert_with(|| {
+                                let idx = block_colormap_mask_texture_queue.len() as i32;
+                                block_colormap_mask_texture_queue.push(packed_mask);
+                                idx
+                            })
+                        } else {
+                            -1
+                        };
+
+                        if let Some(c) = &face_config.colormap0 {
+                            colormap_registry.get_or_register_asset(&c.map, &ns.1);
+                            colormap_queue
+                                .insert(ns.1.join("textures/colormaps").join(&c.map.clone()));
+                        }
+                        if let Some(c) = &face_config.colormap1 {
+                            colormap_registry.get_or_register_asset(&c.map, &ns.1);
+                        }
+                        if let Some(c) = &face_config.colormap2 {
+                            colormap_registry.get_or_register_asset(&c.map, &ns.1);
+                        }
+
+                        let metadata = TextureMetadata {
+                            packed_colormap_ids: pack_colormap_ids(
+                                &face_config,
+                                &colormap_registry,
+                                &ns.1,
+                            ),
+                            mask_atlas_id: mask_atlas_idx,
+                            packed_source_ids: pack_sources(&face_config),
+                            _padding: 0,
+                        };
+
+                        metadata_mapping_table.push(metadata);
                     }
                 }
 
@@ -76,9 +148,29 @@ impl BlockRegistry {
             }
         }
 
-        println!("Mapping table: {:?}", mapping_table);
+        println!("Mapping table: {:?}", texture_mapping_table);
 
-        (registry, texture_queue, mapping_table)
+        if include_assets {
+            (
+                registry,
+                block_texture_queue,
+                block_colormap_mask_texture_queue,
+                colormap_queue,
+                texture_mapping_table,
+                metadata_mapping_table,
+                Some(colormap_registry),
+            )
+        } else {
+            (
+                registry,
+                block_texture_queue,
+                block_colormap_mask_texture_queue,
+                colormap_queue,
+                texture_mapping_table,
+                metadata_mapping_table,
+                None,
+            )
+        }
     }
 
     pub fn register_block(&mut self, id: String, block_definition: BlockDefinition) {
@@ -114,4 +206,49 @@ fn discover_namespaces(data_root: PathBuf) -> Vec<(String, PathBuf)> {
         }
     }
     namespaces
+}
+
+fn load_gray_or_empty(maybe_config: &Option<ColormapConfig>, base_dir: &Path) -> Option<GrayImage> {
+    match maybe_config {
+        Some(config) => {
+            let full_path = base_dir.join(&config.mask);
+            match image::open(&full_path) {
+                Ok(img) => Some(img.to_luma8()),
+                Err(_) => {
+                    panic!("Warning: Could not load mask {:?}, using empty.", full_path);
+                }
+            }
+        }
+        None => None,
+    }
+}
+
+// quantize the 3 masks to be 3 bits 3 bits 2 bits
+pub fn blend_masks(
+    m0: &Option<GrayImage>,
+    m1: &Option<GrayImage>,
+    m2: &Option<GrayImage>,
+) -> GrayImage {
+    let (width, height) = m0
+        .as_ref()
+        .or(m1.as_ref())
+        .or(m2.as_ref())
+        .map(|img| img.dimensions())
+        .unwrap_or((16, 16));
+
+    let mut out = GrayImage::new(width, height);
+
+    let s0 = m0.as_ref().map(|img| img.as_raw());
+    let s1 = m1.as_ref().map(|img| img.as_raw());
+    let s2 = m2.as_ref().map(|img| img.as_raw());
+
+    out.par_iter_mut().enumerate().for_each(|(i, pixel)| {
+        let val0 = s0.map(|s| s[i] >> 5).unwrap_or(0);
+        let val1 = s1.map(|s| (s[i] >> 5) << 3).unwrap_or(0);
+        let val2 = s2.map(|s| (s[i] >> 6) << 6).unwrap_or(0);
+
+        *pixel = val0 | val1 | val2;
+    });
+
+    out
 }

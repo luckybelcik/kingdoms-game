@@ -986,8 +986,10 @@ dependencies = [
 name = "engine_assets"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "engine_core",
  "image",
+ "rayon",
  "rustc-hash 2.1.1",
  "serde",
  "toml",
@@ -1023,6 +1025,7 @@ dependencies = [
  "bytemuck",
  "egui",
  "egui-wgpu",
+ "engine_assets",
  "engine_core",
  "engine_settings",
  "image",
