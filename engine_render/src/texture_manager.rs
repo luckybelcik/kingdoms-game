@@ -1,4 +1,5 @@
 use image::{DynamicImage, GenericImageView, GrayImage};
+use wgpu::TextureViewDimension;
 
 use crate::constants::{MIP_LEVELS, TILE_SIZE_PIXELS};
 
@@ -376,5 +377,8 @@ fn init_colormap_array(
         );
     }
 
-    texture.create_view(&wgpu::TextureViewDescriptor::default())
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(TextureViewDimension::D2Array),
+        ..Default::default()
+    })
 }
