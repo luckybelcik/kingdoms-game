@@ -65,7 +65,7 @@ impl Scene {
         });
 
         let shader_source = fs::read_to_string("shaders/shader.wgsl")
-            .or_else(|e| {
+            .or_else(|_| {
                 let path = DATA_DIR
                     .get()
                     .cloned()

@@ -149,19 +149,3 @@ impl WorldInspector for FxHashMap<ChunkPos, ArcSwap<Chunk>> {
             .unwrap_or(0)
     }
 }
-
-fn swap_y_z(
-    arr: &[ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE],
-) -> [ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE] {
-    let mut new_arr = [0 as ChunkBitRow; CHUNK_SIZE * CHUNK_SIZE];
-
-    for y in 0..CHUNK_SIZE {
-        for z in 0..CHUNK_SIZE {
-            let original_idx = y + z * CHUNK_SIZE;
-            let new_idx = z + y * CHUNK_SIZE;
-
-            new_arr[new_idx] = arr[original_idx];
-        }
-    }
-    new_arr
-}

@@ -7,7 +7,7 @@ use std::{
 use engine_core::paths::DATA_DIR;
 use image::GrayImage;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::{
     block_properties::BlockProperties,
@@ -48,6 +48,7 @@ impl BlockRegistry {
         let mut colormap_registry = ColormapRegistry::default(); // technically obsolete if not including assets but whatever
 
         // breathe air
+        // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_mapping_table.extend_from_slice(&[0; 6]);
 
         let namespaces = discover_namespaces(DATA_DIR.get().cloned().unwrap());
