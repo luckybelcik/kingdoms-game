@@ -51,7 +51,7 @@ impl BlockRegistry {
         // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_mapping_table.extend_from_slice(&[0; 6]);
 
-        let namespaces = discover_namespaces(DATA_DIR.get().cloned().unwrap());
+        let namespaces = get_projects(DATA_DIR.get().cloned().unwrap());
 
         for ns in namespaces {
             let toml_path = ns.1.join("blocks.toml");
@@ -193,20 +193,20 @@ impl BlockRegistry {
     }
 }
 
-fn discover_namespaces(data_root: PathBuf) -> Vec<(String, PathBuf)> {
-    let mut namespaces = Vec::new();
+pub fn get_projects(data_root: PathBuf) -> Vec<(String, PathBuf)> {
+    let mut projects = Vec::new();
 
     if let Ok(entries) = fs::read_dir(data_root) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
                 if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    namespaces.push((name.to_string(), path));
+                    projects.push((name.to_string(), path));
                 }
             }
         }
     }
-    namespaces
+    projects
 }
 
 fn load_gray_or_empty(maybe_config: &Option<ColormapConfig>, base_dir: &Path) -> Option<GrayImage> {
