@@ -56,7 +56,7 @@ impl App {
         Self {
             window: None,
             renderer: None,
-            asset_manager: AssetManager::init(),
+            asset_manager: AssetManager::init(None, true),
             gui_state: None,
             pressed_keys: Default::default(),
             app_info: Default::default(),

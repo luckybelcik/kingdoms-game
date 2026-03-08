@@ -8,7 +8,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use engine_assets::block_registry::BlockRegistry;
+use engine_assets::{block_registry::BlockRegistry, projects::Project};
 use engine_core::{chunk_pos::ChunkPos, entity_pos::EntityPos};
 use engine_net::{
     client_actions::PlayerActions,
@@ -72,8 +72,14 @@ impl Server {
             })
             .unwrap();
 
+        let mut projects_to_load = Vec::new();
+        let all_projects = Project::find_all();
+        for proj in all_projects {
+            projects_to_load.push(proj);
+        }
+
         Self {
-            block_registry: BlockRegistry::init(false).0,
+            block_registry: BlockRegistry::init(&projects_to_load, false).0,
             chunks: FxHashMap::default(),
             dirty_chunks: FxHashSet::default(),
             generating_chunks: FxHashSet::default(),

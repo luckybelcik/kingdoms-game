@@ -1,10 +1,5 @@
-use std::{
-    collections::BTreeSet,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeSet, path::PathBuf};
 
-use engine_core::paths::DATA_DIR;
 use image::GrayImage;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use rustc_hash::FxHashMap;
@@ -13,6 +8,7 @@ use crate::{
     block_properties::BlockProperties,
     colormap_registry::ColormapRegistry,
     manifest::{BlockDefinition, BlockManifest, ColormapConfig, FaceConfig, TextureValue},
+    projects::Project,
     rendering::{TextureMetadata, pack_colormap_ids, pack_sources},
 };
 
@@ -25,6 +21,7 @@ pub struct BlockRegistry {
 
 impl BlockRegistry {
     pub fn init(
+        projects: &[Project],
         include_assets: bool,
     ) -> (
         BlockRegistry,
@@ -51,10 +48,8 @@ impl BlockRegistry {
         // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_mapping_table.extend_from_slice(&[0; 6]);
 
-        let namespaces = get_projects(DATA_DIR.get().cloned().unwrap());
-
-        for ns in namespaces {
-            let toml_path = ns.1.join("blocks.toml");
+        for project in projects {
+            let toml_path = project.path.join("blocks.toml");
             if !toml_path.exists() {
                 continue;
             }
@@ -67,7 +62,7 @@ impl BlockRegistry {
                 let full_id = if block.id.contains(':') {
                     block.id.clone()
                 } else {
-                    format!("{}:{}", ns.0, block.id)
+                    format!("{}:{}", project.name, block.id)
                 };
 
                 if include_assets {
@@ -84,8 +79,10 @@ impl BlockRegistry {
                     };
 
                     for face_config in face_textures {
-                        let full_tex_path =
-                            ns.1.join("textures/blocks").join(face_config.path.clone());
+                        let full_tex_path = project
+                            .path
+                            .join("textures/blocks")
+                            .join(face_config.path.clone());
 
                         let atlas_index = *texture_to_id
                             .entry(full_tex_path.clone())
@@ -101,7 +98,7 @@ impl BlockRegistry {
                             || face_config.colormap1.is_some()
                             || face_config.colormap2.is_some()
                         {
-                            let block_path = ns.1.join("textures/blocks");
+                            let block_path = project.path.join("textures/blocks");
                             let m0 = load_gray_or_empty(&face_config.colormap0, &block_path);
                             let m1 = load_gray_or_empty(&face_config.colormap1, &block_path);
                             let m2 = load_gray_or_empty(&face_config.colormap2, &block_path);
@@ -119,22 +116,23 @@ impl BlockRegistry {
                         };
 
                         if let Some(c) = &face_config.colormap0 {
-                            colormap_registry.get_or_register_asset(&c.map, &ns.1);
-                            colormap_queue
-                                .insert(ns.1.join("textures/colormaps").join(&c.map.clone()));
+                            colormap_registry.get_or_register_asset(&c.map, &project.path);
+                            colormap_queue.insert(
+                                project.path.join("textures/colormaps").join(&c.map.clone()),
+                            );
                         }
                         if let Some(c) = &face_config.colormap1 {
-                            colormap_registry.get_or_register_asset(&c.map, &ns.1);
+                            colormap_registry.get_or_register_asset(&c.map, &project.path);
                         }
                         if let Some(c) = &face_config.colormap2 {
-                            colormap_registry.get_or_register_asset(&c.map, &ns.1);
+                            colormap_registry.get_or_register_asset(&c.map, &project.path);
                         }
 
                         let metadata = TextureMetadata {
                             packed_colormap_ids: pack_colormap_ids(
                                 &face_config,
                                 &colormap_registry,
-                                &ns.1,
+                                &project.path,
                             ),
                             mask_atlas_id: mask_atlas_idx,
                             packed_source_ids: pack_sources(&face_config),
@@ -193,23 +191,10 @@ impl BlockRegistry {
     }
 }
 
-pub fn get_projects(data_root: PathBuf) -> Vec<(String, PathBuf)> {
-    let mut projects = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(data_root) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    projects.push((name.to_string(), path));
-                }
-            }
-        }
-    }
-    projects
-}
-
-fn load_gray_or_empty(maybe_config: &Option<ColormapConfig>, base_dir: &Path) -> Option<GrayImage> {
+fn load_gray_or_empty(
+    maybe_config: &Option<ColormapConfig>,
+    base_dir: &PathBuf,
+) -> Option<GrayImage> {
     match maybe_config {
         Some(config) => {
             let full_path = base_dir.join(&config.mask);
