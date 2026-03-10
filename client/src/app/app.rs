@@ -112,8 +112,8 @@ impl ApplicationHandler for App {
             window_handle.inner_size().height,
         );
 
-        let block_atlas = &self.asset_manager.block_atlas;
-        let mask_atlas = &self.asset_manager.block_colormap_mask_atlas;
+        let block_textures = &self.asset_manager.block_textures;
+        let mask_images = &self.asset_manager.block_colormap_mask_array;
         let colormaps = &self.asset_manager.colormap_textures;
         let texture_mapping = &self.asset_manager.texture_mapping_table;
         let metadata_table = &self.asset_manager.metadata_table;
@@ -125,8 +125,8 @@ impl ApplicationHandler for App {
                     window_handle.clone(),
                     width,
                     height,
-                    block_atlas,
-                    mask_atlas,
+                    block_textures,
+                    mask_images,
                     colormaps,
                     texture_mapping,
                     metadata_table,

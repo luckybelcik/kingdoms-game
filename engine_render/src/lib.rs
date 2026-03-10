@@ -25,9 +25,8 @@ pub struct ChunkDrawCommand {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GlobalUniformData {
-    pub atlas_size: u32,    // 4 bytes
     pub time: f32,          // 4 bytes
-    pub _padding: [f32; 2], // 8 bytes
+    pub _padding: [f32; 3], // 12 bytes
 }
 
 pub struct GlobalUniforms {
