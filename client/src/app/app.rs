@@ -122,6 +122,10 @@ impl ApplicationHandler for App {
             }
         }
 
+        if let Some(asset_manager) = self.asset_manager.as_mut() {
+            asset_manager.clear_queues(); // clear queues bc we used them up in the initialization above
+        }
+
         self.gui_state = Some(gui_state);
         app_info.last_render_time = Some(Instant::now());
 

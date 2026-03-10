@@ -1,3 +1,5 @@
+use image::DynamicImage;
+
 pub struct AssetSlopConfig {
     pub block_padding: u32,
     pub mask_padding: u32,
@@ -20,4 +22,9 @@ impl Default for AssetSlopConfig {
             colormap_padding: 0,
         };
     }
+}
+
+pub struct TextureUpdate {
+    pub layer_index: u32,
+    pub data: DynamicImage,
 }

@@ -3,8 +3,11 @@
 use image::DynamicImage;
 
 use crate::{
-    block_registry::BlockRegistry, colormap_registry::ColormapRegistry,
-    layer_allocator::LayerAllocator, misc::AssetSlopConfig, projects::Project,
+    block_registry::BlockRegistry,
+    colormap_registry::ColormapRegistry,
+    layer_allocator::LayerAllocator,
+    misc::{AssetSlopConfig, TextureUpdate},
+    projects::Project,
     rendering::TextureMetadata,
 };
 
@@ -21,9 +24,9 @@ pub struct AssetManager {
     pub block_registry: BlockRegistry,
     pub colormap_registry: ColormapRegistry,
 
-    pub block_textures: Vec<DynamicImage>,
-    pub block_colormap_mask_array: Vec<DynamicImage>,
-    pub colormap_textures: Vec<DynamicImage>,
+    pub block_upload_queue: Vec<TextureUpdate>,
+    pub mask_upload_queue: Vec<TextureUpdate>,
+    pub colormap_upload_queue: Vec<TextureUpdate>,
 
     pub texture_mapping_table: Vec<u32>,
     pub metadata_table: Vec<TextureMetadata>,
@@ -77,37 +80,49 @@ impl AssetManager {
             colormap_registry,
         ) = BlockRegistry::init(&projects_to_load, true);
 
-        let block_textures: Vec<DynamicImage> = block_texture_paths
+        let block_upload_queue: Vec<TextureUpdate> = block_texture_paths
             .into_iter()
-            .map(|p| image::open(p).expect("Failed to load block texture"))
+            .enumerate()
+            .map(|(i, p)| TextureUpdate {
+                layer_index: i as u32,
+                data: image::open(p).expect("Failed to load block texture"),
+            })
             .collect();
 
-        let block_colormap_mask_array: Vec<DynamicImage> = block_colormap_masks
+        let mask_upload_queue: Vec<TextureUpdate> = block_colormap_masks
             .into_iter()
-            .map(|m| DynamicImage::ImageLuma8(m))
+            .enumerate()
+            .map(|(i, m)| TextureUpdate {
+                layer_index: i as u32,
+                data: DynamicImage::ImageLuma8(m),
+            })
             .collect();
 
-        let colormap_textures: Vec<DynamicImage> = colormap_texture_paths
+        let colormap_upload_queue: Vec<TextureUpdate> = colormap_texture_paths
             .into_iter()
-            .map(|p| image::open(p).expect("Failed to load colormap texture"))
+            .enumerate()
+            .map(|(i, p)| TextureUpdate {
+                layer_index: i as u32,
+                data: image::open(p).expect("Failed to load colormap texture"),
+            })
             .collect();
 
         let config = AssetSlopConfig::default();
 
         let block_allocator =
-            LayerAllocator::new(block_textures.len() as u32, config.block_padding);
+            LayerAllocator::new(block_upload_queue.len() as u32, config.block_padding);
         let mask_allocator =
-            LayerAllocator::new(block_colormap_mask_array.len() as u32, config.mask_padding);
+            LayerAllocator::new(mask_upload_queue.len() as u32, config.mask_padding);
         let colormap_allocator =
-            LayerAllocator::new(colormap_textures.len() as u32, config.colormap_padding);
+            LayerAllocator::new(colormap_upload_queue.len() as u32, config.colormap_padding);
 
         AssetManager {
             block_registry,
             colormap_registry: colormap_registry.unwrap(),
 
-            block_textures,
-            block_colormap_mask_array,
-            colormap_textures,
+            block_upload_queue,
+            mask_upload_queue,
+            colormap_upload_queue,
 
             texture_mapping_table,
             metadata_table,
@@ -116,5 +131,16 @@ impl AssetManager {
             mask_allocator,
             colormap_allocator,
         }
+    }
+
+    /// Clears the queues and shrinks them to fit.
+    pub fn clear_queues(&mut self) {
+        self.block_upload_queue.clear();
+        self.mask_upload_queue.clear();
+        self.colormap_upload_queue.clear();
+
+        self.block_upload_queue.shrink_to_fit();
+        self.mask_upload_queue.shrink_to_fit();
+        self.colormap_upload_queue.shrink_to_fit();
     }
 }

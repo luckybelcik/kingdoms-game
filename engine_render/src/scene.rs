@@ -53,7 +53,7 @@ impl Scene {
                 &texture_manager.block_array.layout,
                 &global_uniforms.layout,
                 &mapping_layout,
-                &texture_manager.colormap_mask_array.layout,
+                &texture_manager.mask_array.layout,
                 &texture_manager.colormap_array.layout,
                 &metadata_layout,
             ],
@@ -206,7 +206,7 @@ impl Scene {
 
         renderpass.set_bind_group(3, &self.texture_mapping_bind_group, &[]);
 
-        renderpass.set_bind_group(4, &self.texture_manager.colormap_mask_array.bind_group, &[]);
+        renderpass.set_bind_group(4, &self.texture_manager.mask_array.bind_group, &[]);
 
         renderpass.set_bind_group(5, &self.texture_manager.colormap_array.bind_group, &[]);
 

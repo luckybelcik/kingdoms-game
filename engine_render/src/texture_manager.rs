@@ -5,7 +5,7 @@ use crate::constants::{MIP_LEVELS, TILE_SIZE_PIXELS};
 
 pub struct TextureManager {
     pub block_array: LocalTexture,
-    pub colormap_mask_array: LocalTexture,
+    pub mask_array: LocalTexture,
     pub colormap_array: LocalTexture,
 }
 
@@ -20,7 +20,11 @@ impl TextureManager {
                 device,
                 queue,
                 "Block Array",
-                &asset_manager.block_textures,
+                asset_manager
+                    .block_upload_queue
+                    .iter()
+                    .map(|texture| &texture.data)
+                    .collect(),
                 asset_manager.block_allocator.max_capacity(),
                 TILE_SIZE_PIXELS,
                 MIP_LEVELS,
@@ -28,11 +32,15 @@ impl TextureManager {
                 wgpu::TextureSampleType::Float { filterable: true },
                 wgpu::AddressMode::Repeat,
             ),
-            colormap_mask_array: Self::create_texture_array(
+            mask_array: Self::create_texture_array(
                 device,
                 queue,
                 "Mask Array",
-                &asset_manager.block_colormap_mask_array,
+                asset_manager
+                    .mask_upload_queue
+                    .iter()
+                    .map(|texture| &texture.data)
+                    .collect(),
                 asset_manager.mask_allocator.max_capacity(),
                 TILE_SIZE_PIXELS,
                 1,
@@ -44,7 +52,11 @@ impl TextureManager {
                 device,
                 queue,
                 "Colormap Array",
-                &asset_manager.colormap_textures,
+                asset_manager
+                    .colormap_upload_queue
+                    .iter()
+                    .map(|texture| &texture.data)
+                    .collect(),
                 asset_manager.colormap_allocator.max_capacity(),
                 128,
                 1,
@@ -55,11 +67,30 @@ impl TextureManager {
         }
     }
 
+    pub fn sync_with_asset_manager(
+        &mut self,
+        queue: &wgpu::Queue,
+        asset_manager: &mut AssetManager,
+    ) {
+        for update in &asset_manager.block_upload_queue {
+            self.block_array
+                .upload_layer(queue, &update.data, update.layer_index)
+        }
+        for update in &asset_manager.mask_upload_queue {
+            self.mask_array
+                .upload_layer(queue, &update.data, update.layer_index)
+        }
+        for update in &asset_manager.colormap_upload_queue {
+            self.colormap_array
+                .upload_layer(queue, &update.data, update.layer_index)
+        }
+    }
+
     pub fn create_texture_array(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         label: &str,
-        images: &Vec<DynamicImage>,
+        images: Vec<&DynamicImage>,
         capacity: u32,
         size: u32,
         mip_level_count: u32,
@@ -71,6 +102,12 @@ impl TextureManager {
             width: size,
             height: size,
             depth_or_array_layers: capacity,
+        };
+
+        let bytes_per_pixel = match format {
+            wgpu::TextureFormat::R8Unorm | wgpu::TextureFormat::R8Uint => 1,
+            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+            _ => 4,
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -85,7 +122,11 @@ impl TextureManager {
         });
 
         for (i, img) in images.iter().enumerate() {
-            let rgba = img.to_rgba8();
+            let raw_data = if bytes_per_pixel == 1 {
+                img.to_luma8().to_vec()
+            } else {
+                img.to_rgba8().to_vec()
+            };
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &texture,
@@ -97,10 +138,10 @@ impl TextureManager {
                     },
                     aspect: wgpu::TextureAspect::All,
                 },
-                &rgba,
+                &raw_data,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(4 * size),
+                    bytes_per_row: Some(bytes_per_pixel * size),
                     rows_per_image: Some(size),
                 },
                 wgpu::Extent3d {
@@ -114,12 +155,14 @@ impl TextureManager {
             if mip_level_count > 1 {
                 for level in 1..mip_level_count {
                     let mip_size = (size >> level).max(1);
-                    let resized = image::imageops::resize(
-                        &rgba,
-                        mip_size,
-                        mip_size,
-                        image::imageops::FilterType::Triangle,
-                    );
+                    let resized =
+                        img.resize(mip_size, mip_size, image::imageops::FilterType::Triangle);
+
+                    let resized_data = if bytes_per_pixel == 1 {
+                        resized.to_luma8().to_vec()
+                    } else {
+                        resized.to_rgba8().to_vec()
+                    };
 
                     queue.write_texture(
                         wgpu::TexelCopyTextureInfo {
@@ -132,10 +175,10 @@ impl TextureManager {
                             },
                             aspect: wgpu::TextureAspect::All,
                         },
-                        &resized,
+                        &resized_data,
                         wgpu::TexelCopyBufferLayout {
                             offset: 0,
-                            bytes_per_row: Some(4 * mip_size),
+                            bytes_per_row: Some(bytes_per_pixel * mip_size),
                             rows_per_image: Some(mip_size),
                         },
                         wgpu::Extent3d {
@@ -208,6 +251,8 @@ impl TextureManager {
             bind_group,
             layout,
             dims: (size, size),
+            mip_level_count,
+            texture,
         }
     }
 }
@@ -216,4 +261,87 @@ pub struct LocalTexture {
     pub bind_group: wgpu::BindGroup,
     pub layout: wgpu::BindGroupLayout,
     pub dims: (u32, u32),
+    pub mip_level_count: u32,
+    pub texture: wgpu::Texture,
+}
+
+impl LocalTexture {
+    pub fn upload_layer(&self, queue: &wgpu::Queue, data: &DynamicImage, layer: u32) {
+        assert!(self.dims.0 == self.dims.1); // assume square size
+        let size = self.dims.0;
+        let mip_level_count = self.mip_level_count;
+
+        let is_single_channel = self.texture.format() == wgpu::TextureFormat::R8Unorm
+            || self.texture.format() == wgpu::TextureFormat::R8Uint;
+
+        let bytes_per_pixel = if is_single_channel { 1 } else { 4 };
+
+        let raw_data = if is_single_channel {
+            data.to_luma8().to_vec()
+        } else {
+            data.to_rgba8().to_vec()
+        };
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: 0,
+                    z: layer,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &raw_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_pixel * size),
+                rows_per_image: Some(size),
+            },
+            wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        if mip_level_count > 1 {
+            for level in 1..mip_level_count {
+                let mip_size = (size >> level).max(1);
+                let resized =
+                    data.resize(mip_size, mip_size, image::imageops::FilterType::Triangle);
+
+                let resized_data = if bytes_per_pixel == 1 {
+                    resized.to_luma8().to_vec()
+                } else {
+                    resized.to_rgba8().to_vec()
+                };
+
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.texture,
+                        mip_level: level,
+                        origin: wgpu::Origin3d {
+                            x: 0,
+                            y: 0,
+                            z: layer,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &resized_data,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(bytes_per_pixel * mip_size),
+                        rows_per_image: Some(mip_size),
+                    },
+                    wgpu::Extent3d {
+                        width: mip_size,
+                        height: mip_size,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+        }
+    }
 }
