@@ -39,7 +39,7 @@ use crate::{
 pub struct App {
     window: Option<Arc<Window>>,
     pub renderer: Option<Renderer>,
-    asset_manager: AssetManager,
+    asset_manager: Option<AssetManager>,
     gui_state: Option<egui_winit::State>,
     pressed_keys: egui::ahash::HashSet<KeyCode>,
     pub app_info: AppInfo,
@@ -56,7 +56,7 @@ impl App {
         Self {
             window: None,
             renderer: None,
-            asset_manager: AssetManager::init(None, true),
+            asset_manager: Some(AssetManager::init(None, true)),
             gui_state: None,
             pressed_keys: Default::default(),
             app_info: Default::default(),
@@ -112,28 +112,14 @@ impl ApplicationHandler for App {
             window_handle.inner_size().height,
         );
 
-        let block_textures = &self.asset_manager.block_textures;
-        let mask_images = &self.asset_manager.block_colormap_mask_array;
-        let colormaps = &self.asset_manager.colormap_textures;
-        let texture_mapping = &self.asset_manager.texture_mapping_table;
-        let metadata_table = &self.asset_manager.metadata_table;
-
-        {
-            env_logger::init();
-            let renderer = pollster::block_on(async move {
-                Renderer::new(
-                    window_handle.clone(),
-                    width,
-                    height,
-                    block_textures,
-                    mask_images,
-                    colormaps,
-                    texture_mapping,
-                    metadata_table,
-                )
-                .await
-            });
-            self.renderer = Some(renderer);
+        if let Some(asset_manager) = self.asset_manager.as_ref() {
+            {
+                env_logger::init();
+                let renderer = pollster::block_on(async move {
+                    Renderer::new(window_handle.clone(), width, height, asset_manager).await
+                });
+                self.renderer = Some(renderer);
+            }
         }
 
         self.gui_state = Some(gui_state);
@@ -435,16 +421,20 @@ impl App {
 fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
     let mut selected_block_string = "";
     let mut selected_block_id = 0;
-    let block_list = app.asset_manager.block_registry.get_all_blocks();
 
-    if let Some(client) = &app.client {
-        if let Some(player_data) = client.get_plater_data() {
-            selected_block_id = player_data.selected_block;
-            selected_block_string = block_list
-                .iter()
-                .find(|(_, id)| **id + 1 == selected_block_id)
-                .map(|(name, _)| name.as_str())
-                .unwrap_or("Unknown");
+    let mut block_list = Vec::new();
+
+    if let Some(asset_manager) = &app.asset_manager {
+        block_list = asset_manager.block_registry.get_all_blocks();
+        if let Some(client) = &app.client {
+            if let Some(player_data) = client.get_plater_data() {
+                selected_block_id = player_data.selected_block;
+                selected_block_string = block_list
+                    .iter()
+                    .find(|(_, id)| **id + 1 == selected_block_id)
+                    .map(|(name, _)| name.as_str())
+                    .unwrap_or("Unknown");
+            }
         }
     }
 

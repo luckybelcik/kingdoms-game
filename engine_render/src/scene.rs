@@ -1,10 +1,9 @@
 use std::fs;
 
-use engine_assets::rendering::TextureMetadata;
+use engine_assets::{AssetManager, rendering::TextureMetadata};
 use engine_core::{entity_pos::EntityPos, paths::DATA_DIR};
 #[cfg(debug_assertions)]
 use engine_settings::client_config::render_config::{RenderConfig, RenderFlags};
-use image::DynamicImage;
 use nalgebra_glm::Vec3;
 use wgpu::{
     BindGroup,
@@ -37,18 +36,15 @@ impl Scene {
         queue: &wgpu::Queue,
         surface_format: wgpu::TextureFormat,
         chunk_ssbo: &wgpu::Buffer,
-        block_textures: &Vec<DynamicImage>,
-        mask_images: &Vec<DynamicImage>,
-        colormaps: &Vec<DynamicImage>,
-        texture_mapping_table: &Vec<u32>,
-        metadata_table: &Vec<TextureMetadata>,
+        asset_manager: &AssetManager,
     ) -> Self {
         let ssbo_layout = get_chunk_ssbo_layout(device);
-        let texture_manager =
-            TextureManager::initialize(device, queue, block_textures, mask_images, colormaps);
+        let texture_manager = TextureManager::initialize(device, queue, asset_manager);
         let global_uniforms = GlobalUniforms::new(device);
-        let (mapping_layout, mapping_bind_group) = init_mapping(device, texture_mapping_table);
-        let (metadata_layout, metadata_bind_group) = init_texture_metadata(device, metadata_table);
+        let (mapping_layout, mapping_bind_group) =
+            init_mapping(device, &asset_manager.texture_mapping_table);
+        let (metadata_layout, metadata_bind_group) =
+            init_texture_metadata(device, &asset_manager.metadata_table);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Scene Pipeline Layout"),

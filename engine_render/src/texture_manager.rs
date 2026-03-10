@@ -1,3 +1,4 @@
+use engine_assets::AssetManager;
 use image::DynamicImage;
 
 use crate::constants::{MIP_LEVELS, TILE_SIZE_PIXELS};
@@ -12,16 +13,15 @@ impl TextureManager {
     pub fn initialize(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        block_textures: &Vec<DynamicImage>,
-        mask_images: &Vec<DynamicImage>,
-        colormaps: &Vec<DynamicImage>,
+        asset_manager: &AssetManager,
     ) -> TextureManager {
         TextureManager {
             block_array: Self::create_texture_array(
                 device,
                 queue,
                 "Block Array",
-                block_textures,
+                &asset_manager.block_textures,
+                asset_manager.block_allocator.max_capacity(),
                 TILE_SIZE_PIXELS,
                 MIP_LEVELS,
                 wgpu::TextureFormat::Rgba8Unorm,
@@ -32,7 +32,8 @@ impl TextureManager {
                 device,
                 queue,
                 "Mask Array",
-                mask_images,
+                &asset_manager.block_colormap_mask_array,
+                asset_manager.mask_allocator.max_capacity(),
                 TILE_SIZE_PIXELS,
                 1,
                 wgpu::TextureFormat::R8Uint,
@@ -43,7 +44,8 @@ impl TextureManager {
                 device,
                 queue,
                 "Colormap Array",
-                colormaps,
+                &asset_manager.colormap_textures,
+                asset_manager.colormap_allocator.max_capacity(),
                 128,
                 1,
                 wgpu::TextureFormat::Rgba8Unorm,
@@ -58,18 +60,17 @@ impl TextureManager {
         queue: &wgpu::Queue,
         label: &str,
         images: &Vec<DynamicImage>,
+        capacity: u32,
         size: u32,
         mip_level_count: u32,
         format: wgpu::TextureFormat,
         sample_type: wgpu::TextureSampleType,
         repeat_mode: wgpu::AddressMode,
     ) -> LocalTexture {
-        let layer_count = images.len().max(1) as u32;
-
         let texture_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth_or_array_layers: layer_count,
+            depth_or_array_layers: capacity,
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {

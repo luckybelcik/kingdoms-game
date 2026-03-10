@@ -3,26 +3,34 @@
 use image::DynamicImage;
 
 use crate::{
-    block_registry::BlockRegistry, colormap_registry::ColormapRegistry, projects::Project,
+    block_registry::BlockRegistry, colormap_registry::ColormapRegistry,
+    layer_allocator::LayerAllocator, misc::AssetSlopConfig, projects::Project,
     rendering::TextureMetadata,
 };
 
 pub mod block_properties;
 pub mod block_registry;
 pub mod colormap_registry;
+pub mod layer_allocator;
 pub mod manifest;
+pub mod misc;
 pub mod projects;
 pub mod rendering;
 
-#[derive(Default)]
 pub struct AssetManager {
     pub block_registry: BlockRegistry,
     pub colormap_registry: ColormapRegistry,
+
     pub block_textures: Vec<DynamicImage>,
     pub block_colormap_mask_array: Vec<DynamicImage>,
     pub colormap_textures: Vec<DynamicImage>,
+
     pub texture_mapping_table: Vec<u32>,
     pub metadata_table: Vec<TextureMetadata>,
+
+    pub block_allocator: LayerAllocator,
+    pub mask_allocator: LayerAllocator,
+    pub colormap_allocator: LayerAllocator,
 }
 
 impl AssetManager {
@@ -69,31 +77,44 @@ impl AssetManager {
             colormap_registry,
         ) = BlockRegistry::init(&projects_to_load, true);
 
-        let mut block_textures = Vec::new();
-        for path in block_texture_paths {
-            let img = image::open(path).expect("Failed to load block texture");
-            block_textures.push(img);
-        }
+        let block_textures: Vec<DynamicImage> = block_texture_paths
+            .into_iter()
+            .map(|p| image::open(p).expect("Failed to load block texture"))
+            .collect();
 
-        let mut block_colormap_mask_array = Vec::new();
-        for mask in block_colormap_masks {
-            block_colormap_mask_array.push(DynamicImage::ImageLuma8(mask));
-        }
+        let block_colormap_mask_array: Vec<DynamicImage> = block_colormap_masks
+            .into_iter()
+            .map(|m| DynamicImage::ImageLuma8(m))
+            .collect();
 
-        let mut colormap_textures = Vec::new();
-        for path in colormap_texture_paths {
-            let img = image::open(path).expect("Failed to load colormap texture");
-            colormap_textures.push(img);
-        }
+        let colormap_textures: Vec<DynamicImage> = colormap_texture_paths
+            .into_iter()
+            .map(|p| image::open(p).expect("Failed to load colormap texture"))
+            .collect();
+
+        let config = AssetSlopConfig::default();
+
+        let block_allocator =
+            LayerAllocator::new(block_textures.len() as u32, config.block_padding);
+        let mask_allocator =
+            LayerAllocator::new(block_colormap_mask_array.len() as u32, config.mask_padding);
+        let colormap_allocator =
+            LayerAllocator::new(colormap_textures.len() as u32, config.colormap_padding);
 
         AssetManager {
             block_registry,
             colormap_registry: colormap_registry.unwrap(),
+
             block_textures,
             block_colormap_mask_array,
             colormap_textures,
+
             texture_mapping_table,
             metadata_table,
+
+            block_allocator,
+            mask_allocator,
+            colormap_allocator,
         }
     }
 }
