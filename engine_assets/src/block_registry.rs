@@ -1,13 +1,12 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
-use image::GrayImage;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use rustc_hash::FxHashMap;
 
 use crate::{
     block_properties::BlockProperties,
     colormap_registry::ColormapRegistry,
-    manifest::{BlockDefinition, BlockManifest, ColormapConfig, FaceConfig, TextureValue},
+    manifest::{BlockDefinition, BlockManifest, FaceConfig, TextureValue},
+    misc::MaskRecipe,
     projects::Project,
     rendering::{TextureMetadata, pack_colormap_ids, pack_sources},
 };
@@ -24,20 +23,22 @@ impl BlockRegistry {
         projects: &[Project],
         include_assets: bool,
     ) -> (
+        Vec<Project>,
         BlockRegistry,
         Vec<PathBuf>,
-        Vec<GrayImage>,
+        Vec<MaskRecipe>,
         BTreeSet<PathBuf>,
         Vec<u32>,
         Vec<TextureMetadata>,
         Option<ColormapRegistry>,
     ) {
+        let mut loaded_projects = Vec::new();
         let mut registry = BlockRegistry::default();
         let mut block_texture_queue = Vec::new();
-        let mut block_colormap_mask_texture_queue = Vec::new();
+        let mut mask_recipes_queue = Vec::new();
         let mut colormap_queue = BTreeSet::default();
         let mut texture_to_id = FxHashMap::default();
-        let mut mask_to_id: FxHashMap<Vec<u8>, i32> = FxHashMap::default();
+        let mut mask_to_id: FxHashMap<MaskRecipe, i32> = FxHashMap::default();
         // facedir + blockid -> textureid
         let mut texture_mapping_table = Vec::new();
         // textureid -> texture metadata
@@ -52,6 +53,8 @@ impl BlockRegistry {
             let toml_path = project.path.join("blocks.toml");
             if !toml_path.exists() {
                 continue;
+            } else {
+                loaded_projects.push(project.clone());
             }
 
             let file_content =
@@ -99,16 +102,27 @@ impl BlockRegistry {
                             || face_config.colormap2.is_some()
                         {
                             let block_path = project.path.join("textures/blocks");
-                            let m0 = load_gray_or_empty(&face_config.colormap0, &block_path);
-                            let m1 = load_gray_or_empty(&face_config.colormap1, &block_path);
-                            let m2 = load_gray_or_empty(&face_config.colormap2, &block_path);
 
-                            let packed_mask = blend_masks(&m0, &m1, &m2);
-                            let raw_bytes = packed_mask.as_raw().clone();
+                            let recipe = MaskRecipe {
+                                paths: [
+                                    face_config
+                                        .colormap0
+                                        .as_ref()
+                                        .map(|c| block_path.join(&c.mask)),
+                                    face_config
+                                        .colormap1
+                                        .as_ref()
+                                        .map(|c| block_path.join(&c.mask)),
+                                    face_config
+                                        .colormap2
+                                        .as_ref()
+                                        .map(|c| block_path.join(&c.mask)),
+                                ],
+                            };
 
-                            *mask_to_id.entry(raw_bytes).or_insert_with(|| {
-                                let idx = block_colormap_mask_texture_queue.len() as i32;
-                                block_colormap_mask_texture_queue.push(packed_mask);
+                            *mask_to_id.entry(recipe.clone()).or_insert_with(|| {
+                                let idx = mask_recipes_queue.len() as i32;
+                                mask_recipes_queue.push(recipe);
                                 idx
                             })
                         } else {
@@ -151,9 +165,10 @@ impl BlockRegistry {
 
         if include_assets {
             (
+                loaded_projects,
                 registry,
                 block_texture_queue,
-                block_colormap_mask_texture_queue,
+                mask_recipes_queue,
                 colormap_queue,
                 texture_mapping_table,
                 metadata_mapping_table,
@@ -161,9 +176,10 @@ impl BlockRegistry {
             )
         } else {
             (
+                loaded_projects,
                 registry,
                 block_texture_queue,
-                block_colormap_mask_texture_queue,
+                mask_recipes_queue,
                 colormap_queue,
                 texture_mapping_table,
                 metadata_mapping_table,
@@ -189,52 +205,4 @@ impl BlockRegistry {
     pub fn get_block(&self, name_id: &String) -> Option<&u16> {
         self.name_to_id.get(name_id)
     }
-}
-
-fn load_gray_or_empty(
-    maybe_config: &Option<ColormapConfig>,
-    base_dir: &PathBuf,
-) -> Option<GrayImage> {
-    match maybe_config {
-        Some(config) => {
-            let full_path = base_dir.join(&config.mask);
-            match image::open(&full_path) {
-                Ok(img) => Some(img.to_luma8()),
-                Err(_) => {
-                    panic!("Warning: Could not load mask {:?}, using empty.", full_path);
-                }
-            }
-        }
-        None => None,
-    }
-}
-
-// quantize the 3 masks to be 3 bits 3 bits 2 bits
-pub fn blend_masks(
-    m0: &Option<GrayImage>,
-    m1: &Option<GrayImage>,
-    m2: &Option<GrayImage>,
-) -> GrayImage {
-    let (width, height) = m0
-        .as_ref()
-        .or(m1.as_ref())
-        .or(m2.as_ref())
-        .map(|img| img.dimensions())
-        .unwrap_or((16, 16));
-
-    let mut out = GrayImage::new(width, height);
-
-    let s0 = m0.as_ref().map(|img| img.as_raw());
-    let s1 = m1.as_ref().map(|img| img.as_raw());
-    let s2 = m2.as_ref().map(|img| img.as_raw());
-
-    out.par_iter_mut().enumerate().for_each(|(i, pixel)| {
-        let val0 = s0.map(|s| s[i] >> 5).unwrap_or(0);
-        let val1 = s1.map(|s| (s[i] >> 5) << 3).unwrap_or(0);
-        let val2 = s2.map(|s| (s[i] >> 6) << 6).unwrap_or(0);
-
-        *pixel = val0 | val1 | val2;
-    });
-
-    out
 }

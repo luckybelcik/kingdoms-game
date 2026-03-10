@@ -1,3 +1,4 @@
+use engine_assets::AssetManager;
 use engine_core::entity_pos::EntityPos;
 use nalgebra_glm::Vec3;
 use wgpu_buffer_allocator::allocator::SSBOAllocator;
@@ -56,6 +57,14 @@ impl Renderer {
     pub fn resize(&mut self, width: u32, height: u32) {
         self.gpu.resize(width, height);
         self.depth_texture_view = self.gpu.create_depth_texture(width, height);
+    }
+
+    pub fn update_assets(&mut self, asset_manager: &mut AssetManager) {
+        self.scene
+            .texture_manager
+            .sync_with_asset_manager(&self.gpu.queue, asset_manager);
+
+        asset_manager.clear_queues();
     }
 
     pub fn render_frame(

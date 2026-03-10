@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use image::DynamicImage;
 
 pub struct AssetSlopConfig {
@@ -27,4 +29,9 @@ impl Default for AssetSlopConfig {
 pub struct TextureUpdate {
     pub layer_index: u32,
     pub data: DynamicImage,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct MaskRecipe {
+    pub paths: [Option<PathBuf>; 3],
 }

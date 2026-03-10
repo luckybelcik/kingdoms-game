@@ -24,7 +24,7 @@ pub struct Scene {
     pub line_pipeline: wgpu::RenderPipeline,
     shared_quad_ibo: wgpu::Buffer,
     chunk_ssbo_bind_group: wgpu::BindGroup,
-    texture_manager: TextureManager,
+    pub texture_manager: TextureManager,
     global_uniforms: GlobalUniforms,
     texture_mapping_bind_group: wgpu::BindGroup,
     metadata_bind_group: wgpu::BindGroup,

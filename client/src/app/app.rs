@@ -360,6 +360,11 @@ impl App {
             return;
         };
 
+        if let Some(asset_manager) = self.asset_manager.as_mut() {
+            asset_manager.update_assets();
+            renderer.update_assets(asset_manager);
+        }
+
         let egui::FullOutput {
             textures_delta,
             shapes,
