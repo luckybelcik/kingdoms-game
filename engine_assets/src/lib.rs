@@ -1,16 +1,19 @@
 #![feature(iter_collect_into)]
 
 use std::{
+    fs,
     path::PathBuf,
     sync::mpsc::{Receiver, channel},
     time::Instant,
 };
 
 use dashmap::DashMap;
-use image::{DynamicImage, GrayImage};
+use image::{DynamicImage, GrayImage, ImageFormat};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+};
+use rustc_hash::FxBuildHasher;
 
 use crate::{
     block_registry::BlockRegistry,
@@ -36,10 +39,10 @@ pub struct AssetManager {
     pub block_registry: BlockRegistry,
     pub colormap_registry: ColormapRegistry,
 
-    pub block_path_to_layer: FxHashMap<PathBuf, u32>,
-    pub colormap_path_to_layer: FxHashMap<PathBuf, u32>,
-    pub mask_dependencies: FxHashMap<PathBuf, Vec<u32>>,
-    pub active_mask_recipes: FxHashMap<u32, MaskRecipe>,
+    pub block_path_to_layer: DashMap<PathBuf, u32, FxBuildHasher>,
+    pub colormap_path_to_layer: DashMap<PathBuf, u32, FxBuildHasher>,
+    pub mask_dependencies: DashMap<PathBuf, Vec<u32>, FxBuildHasher>,
+    pub active_mask_recipes: DashMap<u32, MaskRecipe, FxBuildHasher>,
 
     pub block_upload_queue: Vec<TextureUpdate>,
     pub mask_upload_queue: Vec<TextureUpdate>,
@@ -53,7 +56,6 @@ pub struct AssetManager {
     pub colormap_allocator: LayerAllocator,
 
     pub watch_receiver: Receiver<notify::Result<notify::Event>>,
-    pub watcher: RecommendedWatcher,
 }
 
 impl AssetManager {
@@ -97,11 +99,14 @@ impl AssetManager {
         }
 
         project_timings.project_finding = start_time.elapsed().as_nanos();
+        project_timings.total = project_timings.project_finding;
 
-        let mut block_path_to_layer = FxHashMap::default();
-        let mut colormap_path_to_layer = FxHashMap::default();
-        let mut mask_dependencies: FxHashMap<PathBuf, Vec<u32>> = FxHashMap::default();
-        let mut active_mask_recipes: FxHashMap<u32, MaskRecipe> = FxHashMap::default();
+        let block_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
+        let colormap_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
+        let mask_dependencies: DashMap<PathBuf, Vec<u32>, FxBuildHasher> =
+            DashMap::with_hasher(FxBuildHasher::default());
+        let active_mask_recipes: DashMap<u32, MaskRecipe, FxBuildHasher> =
+            DashMap::with_hasher(FxBuildHasher::default());
 
         let (
             loaded_projects,
@@ -115,59 +120,77 @@ impl AssetManager {
         ) = BlockRegistry::init(&projects_to_load, true);
 
         project_timings.block_registry_init =
-            start_time.elapsed().as_nanos() - project_timings.project_finding;
+            start_time.elapsed().as_nanos() - project_timings.total;
+        project_timings.total += project_timings.block_registry_init;
 
-        let block_upload_queue: Vec<TextureUpdate> = block_texture_paths
-            .into_iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let update = TextureUpdate {
-                    layer_index: i as u32,
-                    data: image::open(&p).expect("Failed to load block texture"),
-                };
-                block_path_to_layer.insert(p, i as u32);
-                update
-            })
-            .collect();
+        let ((block_upload_queue, colormap_upload_queue), mask_upload_queue) = rayon::join(
+            || {
+                rayon::join(
+                    || {
+                        block_texture_paths
+                            .into_par_iter()
+                            .enumerate()
+                            .map(|(i, p)| {
+                                let bytes = fs::read(&p).expect("Failed to read file");
+                                let image =
+                                    image::load_from_memory_with_format(&bytes, ImageFormat::Png)
+                                        .expect("Failed to load block texture");
+                                let update = TextureUpdate {
+                                    layer_index: i as u32,
+                                    data: image,
+                                };
+                                block_path_to_layer.insert(p, i as u32);
+                                update
+                            })
+                            .collect::<Vec<_>>()
+                    },
+                    || {
+                        let colormap_texture_paths =
+                            colormap_texture_paths.into_par_iter().collect::<Vec<_>>();
+                        colormap_texture_paths
+                            .into_par_iter()
+                            .enumerate()
+                            .map(|(i, p)| {
+                                let bytes = fs::read(&p).expect("Failed to read file");
+                                let image =
+                                    image::load_from_memory_with_format(&bytes, ImageFormat::Png)
+                                        .expect("Failed to load block texture");
+                                let update = TextureUpdate {
+                                    layer_index: i as u32,
+                                    data: image,
+                                };
+                                colormap_path_to_layer.insert(p, i as u32);
+                                update
+                            })
+                            .collect::<Vec<_>>()
+                    },
+                )
+            },
+            || {
+                block_colormap_masks
+                    .into_par_iter()
+                    .enumerate()
+                    .map(|(i, recipe)| {
+                        let layer_idx = i as u32;
+                        for path in recipe.paths.iter().flatten() {
+                            mask_dependencies
+                                .entry(path.clone())
+                                .or_default()
+                                .push(layer_idx);
+                        }
+                        active_mask_recipes.insert(layer_idx, recipe.clone());
 
-        let mask_upload_queue: Vec<TextureUpdate> = block_colormap_masks
-            .into_iter()
-            .enumerate()
-            .map(|(i, recipe)| {
-                let layer_idx = i as u32;
+                        TextureUpdate {
+                            layer_index: layer_idx,
+                            data: DynamicImage::ImageLuma8(bake_mask_from_recipe(&recipe)),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            },
+        );
 
-                for path in recipe.paths.iter().flatten() {
-                    mask_dependencies
-                        .entry(path.clone())
-                        .or_default()
-                        .push(layer_idx);
-                }
-                active_mask_recipes.insert(layer_idx, recipe.clone());
-                let baked_image = bake_mask_from_recipe(&recipe);
-
-                let update = TextureUpdate {
-                    layer_index: layer_idx,
-                    data: DynamicImage::ImageLuma8(baked_image),
-                };
-                update
-            })
-            .collect();
-
-        let colormap_upload_queue: Vec<TextureUpdate> = colormap_texture_paths
-            .into_iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let update = TextureUpdate {
-                    layer_index: i as u32,
-                    data: image::open(&p).expect("Failed to load colormap texture"),
-                };
-                colormap_path_to_layer.insert(p, i as u32);
-                update
-            })
-            .collect();
-
-        project_timings.image_loading =
-            start_time.elapsed().as_nanos() - project_timings.block_registry_init;
+        project_timings.image_loading = start_time.elapsed().as_nanos() - project_timings.total;
+        project_timings.total += project_timings.image_loading;
 
         let config = AssetSlopConfig::default();
 
@@ -178,21 +201,25 @@ impl AssetManager {
         let colormap_allocator =
             LayerAllocator::new(colormap_upload_queue.len() as u32, config.colormap_padding);
 
-        project_timings.allocator_setup =
-            start_time.elapsed().as_nanos() - project_timings.image_loading;
+        project_timings.allocator_setup = start_time.elapsed().as_nanos() - project_timings.total;
+        project_timings.total += project_timings.allocator_setup;
 
         let (tx, rx) = channel();
+        let watch_paths: Vec<PathBuf> = loaded_projects.iter().map(|p| p.path.clone()).collect();
 
-        let mut watcher =
-            RecommendedWatcher::new(tx, Config::default()).expect("Failed to create file watcher");
+        std::thread::spawn(move || {
+            let mut watcher =
+                RecommendedWatcher::new(tx, Config::default()).expect("Failed to create watcher");
 
-        for project in &loaded_projects {
-            watcher.watch(&project.path, RecursiveMode::Recursive).ok();
-            println!("Watching project: {}", project.name);
-        }
+            for path in watch_paths {
+                let _ = watcher.watch(&path, RecursiveMode::Recursive);
+            }
 
-        project_timings.watcher_setup =
-            start_time.elapsed().as_nanos() - project_timings.allocator_setup;
+            std::thread::park();
+        });
+
+        project_timings.watcher_setup = start_time.elapsed().as_nanos() - project_timings.total;
+        project_timings.total += project_timings.watcher_setup;
 
         let time_elapsed = start_time.elapsed().as_millis();
         println!("Initialization time: {:?}ms", time_elapsed);
@@ -222,7 +249,6 @@ impl AssetManager {
                 colormap_allocator,
 
                 watch_receiver: rx,
-                watcher,
             },
             project_timings,
         )
@@ -240,17 +266,21 @@ impl AssetManager {
             );
 
             for path in event.paths {
-                if let Some(&layer) = self.block_path_to_layer.get(&path) {
+                if let Some(layer) = self.block_path_to_layer.get(&path).map(|r| *r) {
                     if let Ok(img) = image::open(&path) {
-                        self.push_block_update(layer, img);
+                        self.push_block_update(layer, img); // error 1
                         println!("Hot-reloaded block: {:?}", path.file_name().unwrap());
                     }
                 }
 
-                if let Some(layers) = self.mask_dependencies.get(&path) {
-                    for layer in layers.clone() {
-                        if let Some(recipe) = self.active_mask_recipes.get(&layer) {
-                            let baked = bake_mask_from_recipe(recipe);
+                let layers = self.mask_dependencies.get(&path).map(|r| r.clone());
+
+                if let Some(layers) = layers {
+                    for layer in layers {
+                        if let Some(recipe) =
+                            self.active_mask_recipes.get(&layer).map(|r| r.clone())
+                        {
+                            let baked = bake_mask_from_recipe(&recipe);
                             self.push_mask_update(layer, baked);
                             println!(
                                 "Re-baked mask layer {} due to change in {:?}",
@@ -261,7 +291,7 @@ impl AssetManager {
                     }
                 }
 
-                if let Some(&layer) = self.colormap_path_to_layer.get(&path) {
+                if let Some(layer) = self.colormap_path_to_layer.get(&path).map(|r| *r) {
                     if let Ok(img) = image::open(&path) {
                         println!("Hot-reloaded colormap: {:?}", path.file_name().unwrap());
                         self.push_colormap_update(layer, img);

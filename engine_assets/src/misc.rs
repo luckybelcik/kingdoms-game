@@ -43,6 +43,7 @@ pub struct Timings {
     pub image_loading: u128,
     pub allocator_setup: u128,
     pub watcher_setup: u128,
+    pub total: u128,
 }
 
 impl Timings {
@@ -52,6 +53,7 @@ impl Timings {
         self.image_loading += other.image_loading;
         self.allocator_setup += other.allocator_setup;
         self.watcher_setup += other.watcher_setup;
+        self.total += other.total;
     }
 
     pub fn print(&self) {
