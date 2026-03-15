@@ -117,7 +117,7 @@ impl AssetManager {
             texture_mapping_table,
             metadata_table,
             colormap_registry,
-        ) = BlockRegistry::init(&projects_to_load, true);
+        ) = BlockRegistry::init(projects_to_load, true);
 
         project_timings.block_registry_init =
             start_time.elapsed().as_nanos() - project_timings.total;

@@ -21,7 +21,7 @@ pub struct BlockRegistry {
 
 impl BlockRegistry {
     pub fn init(
-        projects: &[Project],
+        projects: Vec<Project>,
         include_assets: bool,
     ) -> (
         Vec<Project>,
@@ -40,7 +40,7 @@ impl BlockRegistry {
                 let file_content = std::fs::read_to_string(&toml_path).ok()?;
                 let manifest: BlockManifest = toml::from_str(&file_content).expect("Invalid TOML");
 
-                Some((project.clone(), manifest))
+                Some((project, manifest))
             })
             .collect();
 
@@ -62,8 +62,6 @@ impl BlockRegistry {
         texture_mapping_table.extend_from_slice(&[0; 6]);
 
         for (project, manifest) in parsed_projects {
-            loaded_projects.push(project.clone());
-
             for block in manifest.blocks {
                 let full_id = if block.id.contains(':') {
                     block.id.clone()
@@ -152,7 +150,7 @@ impl BlockRegistry {
                                 &project.path,
                             ),
                             mask_atlas_id: mask_atlas_idx,
-                            packed_source_ids: pack_sources(&face_config),
+                            packed_source_ids_and_flipbits: pack_sources(&face_config),
                             _padding: 0,
                         };
 
@@ -162,6 +160,8 @@ impl BlockRegistry {
 
                 registry.register_block(full_id, block);
             }
+
+            loaded_projects.push(project);
         }
 
         println!("Mapping table: {:?}", texture_mapping_table);

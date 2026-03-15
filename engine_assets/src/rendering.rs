@@ -11,8 +11,8 @@ pub struct TextureMetadata {
     // two first have 11 bits, last has 10 bits
     pub packed_colormap_ids: u32,
     pub mask_atlas_id: i32, // -1 if no mask
-    // each ids has 5 bits, 2 bits leftover
-    pub packed_source_ids: u32,
+    // each ids has 5 bits, 2 bits for texture flipping (bit 31 is X bit 32 is Y)
+    pub packed_source_ids_and_flipbits: u32,
     pub _padding: u32,
 }
 
@@ -50,6 +50,13 @@ pub fn pack_sources(config: &FaceConfig) -> u32 {
     let (s1a, s1b) = get_pair(&config.colormap1);
     let (s2a, s2b) = get_pair(&config.colormap2);
 
-    // Packing: 6 slots * 5 bits
-    s0a | (s0b << 5) | (s1a << 10) | (s1b << 15) | (s2a << 20) | (s2b << 25)
+    let flip_x = config.flip_x.unwrap_or(false) as u32;
+    let flip_y = config.flip_y.unwrap_or(false) as u32;
+    s0a | (s0b << 5)
+        | (s1a << 10)
+        | (s1b << 15)
+        | (s2a << 20)
+        | (s2b << 25)
+        | (flip_x << 30)
+        | (flip_y << 31)
 }

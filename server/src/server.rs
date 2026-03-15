@@ -79,7 +79,7 @@ impl Server {
         }
 
         Self {
-            block_registry: BlockRegistry::init(&projects_to_load, false).1,
+            block_registry: BlockRegistry::init(projects_to_load, false).1,
             chunks: FxHashMap::default(),
             dirty_chunks: FxHashSet::default(),
             generating_chunks: FxHashSet::default(),

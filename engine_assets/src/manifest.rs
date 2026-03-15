@@ -31,6 +31,8 @@ pub struct FaceConfig {
     pub colormap0: Option<ColormapConfig>,
     pub colormap1: Option<ColormapConfig>,
     pub colormap2: Option<ColormapConfig>,
+    pub flip_x: Option<bool>,
+    pub flip_y: Option<bool>,
 }
 
 impl FaceConfig {
@@ -40,6 +42,8 @@ impl FaceConfig {
             colormap0: None,
             colormap1: None,
             colormap2: None,
+            flip_x: None,
+            flip_y: None,
         }
     }
 }
@@ -86,6 +90,8 @@ impl TextureConfig {
                     colormap0: None,
                     colormap1: None,
                     colormap2: None,
+                    flip_x: None,
+                    flip_y: None,
                 },
                 FaceValue::Detailed(config) => config.clone(),
             }
