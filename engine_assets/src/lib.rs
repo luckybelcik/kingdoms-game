@@ -6,16 +6,17 @@ use std::{
     time::Instant,
 };
 
+use dashmap::DashMap;
 use image::{DynamicImage, GrayImage};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
     block_registry::BlockRegistry,
     colormap_registry::ColormapRegistry,
     layer_allocator::LayerAllocator,
-    misc::{AssetSlopConfig, MaskRecipe, TextureUpdate},
+    misc::{AssetSlopConfig, MaskRecipe, TextureUpdate, Timings},
     projects::Project,
     rendering::TextureMetadata,
 };
@@ -56,7 +57,11 @@ pub struct AssetManager {
 }
 
 impl AssetManager {
-    pub fn init(load_projects: Option<Vec<String>>, load_native_by_default: bool) -> AssetManager {
+    pub fn init(
+        load_projects: Option<Vec<String>>,
+        load_native_by_default: bool,
+    ) -> (AssetManager, Timings) {
+        let mut project_timings = Timings::default();
         let start_time = Instant::now();
 
         let mut projects_to_load = Vec::new();
@@ -91,6 +96,8 @@ impl AssetManager {
             }
         }
 
+        project_timings.project_finding = start_time.elapsed().as_nanos();
+
         let mut block_path_to_layer = FxHashMap::default();
         let mut colormap_path_to_layer = FxHashMap::default();
         let mut mask_dependencies: FxHashMap<PathBuf, Vec<u32>> = FxHashMap::default();
@@ -106,6 +113,9 @@ impl AssetManager {
             metadata_table,
             colormap_registry,
         ) = BlockRegistry::init(&projects_to_load, true);
+
+        project_timings.block_registry_init =
+            start_time.elapsed().as_nanos() - project_timings.project_finding;
 
         let block_upload_queue: Vec<TextureUpdate> = block_texture_paths
             .into_iter()
@@ -156,6 +166,9 @@ impl AssetManager {
             })
             .collect();
 
+        project_timings.image_loading =
+            start_time.elapsed().as_nanos() - project_timings.block_registry_init;
+
         let config = AssetSlopConfig::default();
 
         let block_allocator =
@@ -164,6 +177,9 @@ impl AssetManager {
             LayerAllocator::new(mask_upload_queue.len() as u32, config.mask_padding);
         let colormap_allocator =
             LayerAllocator::new(colormap_upload_queue.len() as u32, config.colormap_padding);
+
+        project_timings.allocator_setup =
+            start_time.elapsed().as_nanos() - project_timings.image_loading;
 
         let (tx, rx) = channel();
 
@@ -175,35 +191,41 @@ impl AssetManager {
             println!("Watching project: {}", project.name);
         }
 
+        project_timings.watcher_setup =
+            start_time.elapsed().as_nanos() - project_timings.allocator_setup;
+
         let time_elapsed = start_time.elapsed().as_millis();
         println!("Initialization time: {:?}ms", time_elapsed);
         println!("Block count: {:?}", block_registry.get_block_count());
 
-        AssetManager {
-            active_projects: loaded_projects,
+        (
+            AssetManager {
+                active_projects: loaded_projects,
 
-            block_registry,
-            colormap_registry: colormap_registry.unwrap(),
+                block_registry,
+                colormap_registry: colormap_registry.unwrap(),
 
-            block_path_to_layer,
-            colormap_path_to_layer,
-            mask_dependencies,
-            active_mask_recipes,
+                block_path_to_layer,
+                colormap_path_to_layer,
+                mask_dependencies,
+                active_mask_recipes,
 
-            block_upload_queue,
-            mask_upload_queue,
-            colormap_upload_queue,
+                block_upload_queue,
+                mask_upload_queue,
+                colormap_upload_queue,
 
-            texture_mapping_table,
-            metadata_table,
+                texture_mapping_table,
+                metadata_table,
 
-            block_allocator,
-            mask_allocator,
-            colormap_allocator,
+                block_allocator,
+                mask_allocator,
+                colormap_allocator,
 
-            watch_receiver: rx,
-            watcher,
-        }
+                watch_receiver: rx,
+                watcher,
+            },
+            project_timings,
+        )
     }
 
     pub fn update_assets(&mut self) {

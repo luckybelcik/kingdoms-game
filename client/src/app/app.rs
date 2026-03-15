@@ -56,7 +56,8 @@ impl App {
         Self {
             window: None,
             renderer: None,
-            asset_manager: Some(AssetManager::init(None, true)),
+            // we only get the manager and ignore timings
+            asset_manager: Some(AssetManager::init(None, true).0),
             gui_state: None,
             pressed_keys: Default::default(),
             app_info: Default::default(),
