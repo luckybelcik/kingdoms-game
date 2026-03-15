@@ -133,7 +133,7 @@ impl AssetManager {
                             .map(|(i, p)| {
                                 let bytes = fs::read(&p).expect("Failed to read file");
                                 let image =
-                                    image::load_from_memory_with_format(&bytes, ImageFormat::Png)
+                                    image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
                                         .expect("Failed to load block texture");
                                 let update = TextureUpdate {
                                     layer_index: i as u32,
@@ -153,7 +153,7 @@ impl AssetManager {
                             .map(|(i, p)| {
                                 let bytes = fs::read(&p).expect("Failed to read file");
                                 let image =
-                                    image::load_from_memory_with_format(&bytes, ImageFormat::Png)
+                                    image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
                                         .expect("Failed to load block texture");
                                 let update = TextureUpdate {
                                     layer_index: i as u32,
@@ -361,15 +361,24 @@ impl AssetManager {
 }
 
 fn bake_mask_from_recipe(recipe: &MaskRecipe) -> GrayImage {
-    let m0 = recipe.paths[0]
-        .as_ref()
-        .and_then(|p| image::open(p).ok().map(|i| i.to_luma8()));
-    let m1 = recipe.paths[1]
-        .as_ref()
-        .and_then(|p| image::open(p).ok().map(|i| i.to_luma8()));
-    let m2 = recipe.paths[2]
-        .as_ref()
-        .and_then(|p| image::open(p).ok().map(|i| i.to_luma8()));
+    let m0 = recipe.paths[0].as_ref().and_then(|p| {
+        let bytes = fs::read(&p).expect("Failed to read file");
+        image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
+            .ok()
+            .map(|i| i.to_luma8())
+    });
+    let m1 = recipe.paths[1].as_ref().and_then(|p| {
+        let bytes = fs::read(&p).expect("Failed to read file");
+        image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
+            .ok()
+            .map(|i| i.to_luma8())
+    });
+    let m2 = recipe.paths[2].as_ref().and_then(|p| {
+        let bytes = fs::read(&p).expect("Failed to read file");
+        image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
+            .ok()
+            .map(|i| i.to_luma8())
+    });
 
     blend_masks(&m0, &m1, &m2)
 }
