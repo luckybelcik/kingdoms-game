@@ -3,6 +3,7 @@
 use std::{
     path::PathBuf,
     sync::mpsc::{Receiver, channel},
+    time::Instant,
 };
 
 use image::{DynamicImage, GrayImage};
@@ -56,6 +57,8 @@ pub struct AssetManager {
 
 impl AssetManager {
     pub fn init(load_projects: Option<Vec<String>>, load_native_by_default: bool) -> AssetManager {
+        let start_time = Instant::now();
+
         let mut projects_to_load = Vec::new();
 
         if load_native_by_default {
@@ -171,6 +174,10 @@ impl AssetManager {
             watcher.watch(&project.path, RecursiveMode::Recursive).ok();
             println!("Watching project: {}", project.name);
         }
+
+        let time_elapsed = start_time.elapsed().as_millis();
+        println!("Initialization time: {:?}ms", time_elapsed);
+        println!("Block count: {:?}", block_registry.get_block_count());
 
         AssetManager {
             active_projects: loaded_projects,

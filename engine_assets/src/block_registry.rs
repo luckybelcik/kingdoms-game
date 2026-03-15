@@ -205,4 +205,8 @@ impl BlockRegistry {
     pub fn get_block(&self, name_id: &String) -> Option<&u16> {
         self.name_to_id.get(name_id)
     }
+
+    pub fn get_block_count(&self) -> usize {
+        self.name_to_id.len()
+    }
 }
