@@ -1,5 +1,6 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rustc_hash::FxHashMap;
 
 use crate::{
@@ -32,6 +33,17 @@ impl BlockRegistry {
         Vec<TextureMetadata>,
         Option<ColormapRegistry>,
     ) {
+        let parsed_projects: Vec<_> = projects
+            .into_par_iter()
+            .filter_map(|project| {
+                let toml_path = project.path.join("blocks.toml");
+                let file_content = std::fs::read_to_string(&toml_path).ok()?;
+                let manifest: BlockManifest = toml::from_str(&file_content).expect("Invalid TOML");
+
+                Some((project.clone(), manifest))
+            })
+            .collect();
+
         let mut loaded_projects = Vec::new();
         let mut registry = BlockRegistry::default();
         let mut block_texture_queue = Vec::new();
@@ -49,17 +61,8 @@ impl BlockRegistry {
         // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_mapping_table.extend_from_slice(&[0; 6]);
 
-        for project in projects {
-            let toml_path = project.path.join("blocks.toml");
-            if !toml_path.exists() {
-                continue;
-            } else {
-                loaded_projects.push(project.clone());
-            }
-
-            let file_content =
-                std::fs::read_to_string(toml_path).expect("Failed to read blocks.toml");
-            let manifest: BlockManifest = toml::from_str(&file_content).expect("Invalid TOML");
+        for (project, manifest) in parsed_projects {
+            loaded_projects.push(project.clone());
 
             for block in manifest.blocks {
                 let full_id = if block.id.contains(':') {
