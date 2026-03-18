@@ -1,12 +1,13 @@
 use std::fs;
 
-use engine_assets::{AssetManager, rendering::TextureMetadata};
+use bytemuck::{Pod, Zeroable};
+use engine_assets::AssetManager;
 use engine_core::{entity_pos::EntityPos, paths::DATA_DIR};
 #[cfg(debug_assertions)]
 use engine_settings::client_config::render_config::{RenderConfig, RenderFlags};
 use nalgebra_glm::Vec3;
 use wgpu::{
-    BindGroup,
+    ShaderStages,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -27,7 +28,7 @@ pub struct Scene {
     pub texture_manager: TextureManager,
     global_uniforms: GlobalUniforms,
     texture_mapping_bind_group: wgpu::BindGroup,
-    metadata_bind_group: wgpu::BindGroup,
+    tables_bind_group: wgpu::BindGroup,
 }
 
 impl Scene {
@@ -41,10 +42,22 @@ impl Scene {
         let ssbo_layout = get_chunk_ssbo_layout(device);
         let texture_manager = TextureManager::initialize(device, queue, asset_manager);
         let global_uniforms = GlobalUniforms::new(device);
-        let (mapping_layout, mapping_bind_group) =
-            init_mapping(device, &asset_manager.texture_mapping_table);
-        let (metadata_layout, metadata_bind_group) =
-            init_texture_metadata(device, &asset_manager.metadata_table);
+        let (mapping_layout, mapping_bind_group, _) = create_storage_buffer(
+            device,
+            "mapping_table",
+            ShaderStages::VERTEX,
+            &asset_manager.texture_mapping_table,
+        );
+        let (tables_layout, tables_bind_group, _) = create_multi_storage_buffer(
+            device,
+            "tables",
+            ShaderStages::FRAGMENT,
+            &vec![
+                bytemuck::cast_slice(&asset_manager.metadata_table),
+                bytemuck::cast_slice(&asset_manager.texture_variant_mapping_table),
+                bytemuck::cast_slice(&asset_manager.colormap_mask_variant_mapping_table),
+            ],
+        );
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Scene Pipeline Layout"),
@@ -55,7 +68,7 @@ impl Scene {
                 &mapping_layout,
                 &texture_manager.mask_array.layout,
                 &texture_manager.colormap_array.layout,
-                &metadata_layout,
+                &tables_layout,
             ],
             push_constant_ranges: &[PushConstants::get_range()],
         });
@@ -123,7 +136,7 @@ impl Scene {
             texture_manager,
             global_uniforms,
             texture_mapping_bind_group: mapping_bind_group,
-            metadata_bind_group,
+            tables_bind_group,
         }
     }
 }
@@ -210,7 +223,7 @@ impl Scene {
 
         renderpass.set_bind_group(5, &self.texture_manager.colormap_array.bind_group, &[]);
 
-        renderpass.set_bind_group(6, &self.metadata_bind_group, &[]);
+        renderpass.set_bind_group(6, &self.tables_bind_group, &[]);
 
         PushConstants::update_render_config(renderpass);
 
@@ -278,57 +291,29 @@ fn get_chunk_ssbo_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
-fn init_mapping(
+pub fn create_storage_buffer<T: Pod + Zeroable>(
     device: &wgpu::Device,
-    mapping_table: &Vec<u32>,
-) -> (wgpu::BindGroupLayout, BindGroup) {
-    let mapping_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Texture Mapping Storage Buffer"),
-        contents: bytemuck::cast_slice(mapping_table),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-
-    let mapping_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("Texture Mapping Layout"),
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-    });
-
-    let mapping_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Texture Mapping Bind Group"),
-        layout: &mapping_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: mapping_buffer.as_entire_binding(),
-        }],
-    });
-
-    (mapping_layout, mapping_bind_group)
-}
-
-fn init_texture_metadata(
-    device: &wgpu::Device,
-    metadata_table: &Vec<TextureMetadata>,
-) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
+    name: &str,
+    visibility: wgpu::ShaderStages,
+    contents: &[T],
+) -> (wgpu::BindGroupLayout, wgpu::BindGroup, wgpu::Buffer) {
+    let empty = vec![0_u8];
+    let bytes = if contents.len() == 0 {
+        &empty
+    } else {
+        bytemuck::cast_slice(contents)
+    };
     let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Texture Metadata Storage Buffer"),
-        contents: bytemuck::cast_slice(metadata_table),
-        usage: wgpu::BufferUsages::STORAGE,
+        label: Some(&format!("{} Buffer", name)),
+        contents: bytes,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
     });
 
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("Texture Metadata Layout"),
+        label: Some(&format!("{} Layout", name)),
         entries: &[wgpu::BindGroupLayoutEntry {
             binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
+            visibility: visibility,
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
@@ -339,7 +324,7 @@ fn init_texture_metadata(
     });
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Texture Metadata Bind Group"),
+        label: Some(&format!("{} Bind Group", name)),
         layout: &layout,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
@@ -347,5 +332,60 @@ fn init_texture_metadata(
         }],
     });
 
-    (layout, bind_group)
+    (layout, bind_group, buffer)
+}
+
+pub fn create_multi_storage_buffer(
+    device: &wgpu::Device,
+    name: &str,
+    visibility: wgpu::ShaderStages,
+    contents: &[&[u8]],
+) -> (wgpu::BindGroupLayout, wgpu::BindGroup, Vec<wgpu::Buffer>) {
+    let mut buffers = Vec::new();
+    let mut layout_entries = Vec::new();
+
+    for (i, &data) in contents.iter().enumerate() {
+        let binding_idx = i as u32;
+        let final_bytes = if data.is_empty() { &[0u8; 4] } else { data };
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{} Buffer {}", name, binding_idx)),
+            contents: final_bytes,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        buffers.push(buffer);
+
+        layout_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: binding_idx,
+            visibility,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
+    }
+
+    let mut group_entries = Vec::new();
+    for (i, buffer) in buffers.iter().enumerate() {
+        group_entries.push(wgpu::BindGroupEntry {
+            binding: i as u32,
+            resource: buffer.as_entire_binding(),
+        });
+    }
+
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some(&format!("{} Layout", name)),
+        entries: &layout_entries,
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(&format!("{} Bind Group", name)),
+        layout: &layout,
+        entries: &group_entries,
+    });
+
+    (layout, bind_group, buffers)
 }

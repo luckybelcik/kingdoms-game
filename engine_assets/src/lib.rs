@@ -50,6 +50,8 @@ pub struct AssetManager {
 
     pub texture_mapping_table: Vec<u32>,
     pub metadata_table: Vec<TextureMetadata>,
+    pub texture_variant_mapping_table: Vec<u32>,
+    pub colormap_mask_variant_mapping_table: Vec<u32>,
 
     pub block_allocator: LayerAllocator,
     pub mask_allocator: LayerAllocator,
@@ -116,6 +118,8 @@ impl AssetManager {
             colormap_texture_paths,
             texture_mapping_table,
             metadata_table,
+            texture_variant_mapping_table,
+            colormap_mask_variant_mapping_table,
             colormap_registry,
         ) = BlockRegistry::init(projects_to_load, true);
 
@@ -243,6 +247,8 @@ impl AssetManager {
 
                 texture_mapping_table,
                 metadata_table,
+                texture_variant_mapping_table,
+                colormap_mask_variant_mapping_table,
 
                 block_allocator,
                 mask_allocator,

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{
     colormap_registry::{ColormapRegistry, string_to_source_id},
-    manifest::{ColormapConfig, FaceConfig, SourceValue},
+    manifest::{ColormapConfig, FaceConfigWithVariants, SourceValue},
 };
 
 #[repr(C)]
@@ -10,14 +10,19 @@ use crate::{
 pub struct TextureMetadata {
     // two first have 11 bits, last has 10 bits
     pub packed_colormap_ids: u32,
-    pub mask_atlas_id: i32, // -1 if no mask
+    pub mask_atlas_id: u32, // 0 if no mask
     // each ids has 5 bits, 2 bits for texture flipping (bit 31 is X bit 32 is Y)
     pub packed_source_ids_and_flipbits: u32,
-    pub _padding: u32,
+    // 1st bit = use texture variants, 2nd bit = use colormap mask variants
+    pub additional_meta: u32,
 }
 
 // bits 0-10: CM0_ID, 11-21: CM1_ID, 22-31: CM2_ID
-pub fn pack_colormap_ids(config: &FaceConfig, registry: &ColormapRegistry, ns_path: &Path) -> u32 {
+pub fn pack_colormap_ids(
+    config: &FaceConfigWithVariants,
+    registry: &ColormapRegistry,
+    ns_path: &Path,
+) -> u32 {
     let get_id = |conf: &Option<ColormapConfig>| {
         conf.as_ref()
             .map(|c| registry.get_colormap_id(&c.map, ns_path))
@@ -31,7 +36,7 @@ pub fn pack_colormap_ids(config: &FaceConfig, registry: &ColormapRegistry, ns_pa
     id0 | (id1 << 11) | (id2 << 22)
 }
 
-pub fn pack_sources(config: &FaceConfig) -> u32 {
+pub fn pack_sources(config: &FaceConfigWithVariants) -> u32 {
     let get_pair = |conf: &Option<ColormapConfig>| -> (u32, u32) {
         if let Some(c) = conf {
             match &c.source {
