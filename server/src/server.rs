@@ -28,7 +28,7 @@ use crate::prioritized_job::PrioritizedJob;
 pub type GeneratedChunk = (ChunkPos, Chunk);
 
 pub struct Server {
-    pub block_registry: BlockRegistry,
+    pub block_registry: Arc<BlockRegistry>,
     pub chunks: FxHashMap<ChunkPos, ArcSwap<Chunk>>,
     pub dirty_chunks: FxHashSet<ChunkPos>,
     pub generating_chunks: FxHashSet<ChunkPos>,
@@ -46,10 +46,21 @@ impl Server {
         let (generated_chunk_sender, generated_chunk_receiver) =
             std::sync::mpsc::channel::<GeneratedChunk>();
 
+        let mut projects_to_load = Vec::new();
+        let all_projects = Project::find_all();
+        for proj in all_projects {
+            projects_to_load.push(proj);
+        }
+
+        let block_registry = BlockRegistry::init(projects_to_load, false).1;
+        let block_registry_arc = Arc::new(block_registry);
+        let block_registry_arc_clone = block_registry_arc.clone();
+
         let queue_clone = queue.clone();
         std::thread::Builder::new()
             .name("ServerChunkGenThread".to_string())
             .spawn(move || {
+                let block_registry_arc_clone_2 = block_registry_arc_clone;
                 loop {
                     let (lock, cvar) = &*queue_clone;
                     let mut heap = lock.lock().unwrap();
@@ -63,8 +74,9 @@ impl Server {
 
                         let pos = job.pos;
                         let generated_chunk_sender_copy = generated_chunk_sender.clone();
+                        let block_registry_arc_clone_3 = block_registry_arc_clone_2.clone();
                         rayon::spawn(move || {
-                            let chunk = Chunk::generate(pos.clone());
+                            let chunk = Chunk::generate(pos.clone(), block_registry_arc_clone_3);
                             let _ = generated_chunk_sender_copy.send((pos, chunk));
                         });
                     }
@@ -72,14 +84,8 @@ impl Server {
             })
             .unwrap();
 
-        let mut projects_to_load = Vec::new();
-        let all_projects = Project::find_all();
-        for proj in all_projects {
-            projects_to_load.push(proj);
-        }
-
         Self {
-            block_registry: BlockRegistry::init(projects_to_load, false).1,
+            block_registry: block_registry_arc,
             chunks: FxHashMap::default(),
             dirty_chunks: FxHashSet::default(),
             generating_chunks: FxHashSet::default(),

@@ -459,7 +459,7 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
                 selected_block_id = player_data.selected_block;
                 selected_block_string = block_list
                     .iter()
-                    .find(|(_, id)| **id + 1 == selected_block_id)
+                    .find(|(_, id)| **id == selected_block_id)
                     .map(|(name, _)| name.as_str())
                     .unwrap_or("Unknown");
             }
@@ -546,10 +546,10 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
                 .show_ui(ui, |ui| {
                     for (name, id) in block_list {
                         if ui
-                            .selectable_value(&mut selected_block_id, *id + 1, name)
+                            .selectable_value(&mut selected_block_id, *id, name)
                             .clicked()
                         {
-                            new_block = *id + 1;
+                            new_block = *id;
                             new_block_string = name;
                         };
                     }

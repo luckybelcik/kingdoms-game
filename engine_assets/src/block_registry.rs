@@ -66,6 +66,13 @@ impl BlockRegistry {
         // breathe air
         // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_or_variant_mapping_table.extend_from_slice(&[0; 6]);
+        registry.register_block(
+            "native:air".to_string(),
+            BlockDefinition {
+                id: "naive:air".to_string(),
+                faces: FacesOptions::Unified("air".to_string()),
+            },
+        );
 
         for (project, manifest) in parsed_projects {
             for block in manifest.blocks {
@@ -276,7 +283,7 @@ impl BlockRegistry {
         self.name_to_id.iter().collect()
     }
 
-    pub fn get_block(&self, name_id: &String) -> Option<&u16> {
+    pub fn get_block(&self, name_id: &str) -> Option<&u16> {
         self.name_to_id.get(name_id)
     }
 

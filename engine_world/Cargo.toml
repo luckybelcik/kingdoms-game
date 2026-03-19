@@ -9,3 +9,4 @@ arc-swap = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 engine_core = { workspace = true }
+engine_assets = { workspace = true }

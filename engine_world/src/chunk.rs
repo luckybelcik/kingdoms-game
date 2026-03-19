@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use arc_swap::ArcSwap;
+use engine_assets::block_registry::BlockRegistry;
 use engine_core::{
     chunk_pos::ChunkPos,
     chunk_relative::ChunkRelative,
@@ -31,8 +34,9 @@ impl Chunk {
 
     // we avoid using the fancy coordinate types here cause its a hot loop
     // TRUST MI BRO this is 100x faster
-    pub fn generate(chunk_pos: ChunkPos) -> Self {
+    pub fn generate(chunk_pos: ChunkPos, block_registry: Arc<BlockRegistry>) -> Self {
         let mut chunk = Self::new(chunk_pos);
+        let main_block = block_registry.get_block("native:stone").unwrap();
 
         let c_y = chunk_pos.y;
 
@@ -42,8 +46,7 @@ impl Chunk {
                     let b_y = y as i32 + c_y * CHUNK_SIZE as i32;
 
                     if b_y < 0 {
-                        let block = 1;
-                        chunk.set_block_unsafe(x, y, z, block);
+                        chunk.set_block_unsafe(x, y, z, *main_block);
                     }
                 }
             }

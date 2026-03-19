@@ -1079,6 +1079,7 @@ name = "engine_world"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "engine_assets",
  "engine_core",
  "rustc-hash 2.1.1",
  "serde",
