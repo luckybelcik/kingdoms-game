@@ -67,6 +67,10 @@ impl Renderer {
         asset_manager.clear_queues();
     }
 
+    pub async fn replace_shader(&mut self, code: &str) -> Result<(), String> {
+        self.scene.replace_shader(&self.gpu.device, code).await
+    }
+
     pub fn render_frame(
         &mut self,
         screen_descriptor: egui_wgpu::ScreenDescriptor,

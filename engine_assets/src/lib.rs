@@ -19,7 +19,9 @@ use crate::{
     block_registry::BlockRegistry,
     colormap_registry::ColormapRegistry,
     layer_allocator::LayerAllocator,
-    misc::{AssetManagerMemory, AssetSlopConfig, MaskRecipe, TextureUpdate, Timings},
+    misc::{
+        AssetManagerMemory, AssetSlopConfig, MaskRecipe, PendingUpdate, TextureUpdate, Timings,
+    },
     projects::Project,
     rendering::TextureMetadata,
 };
@@ -47,6 +49,7 @@ pub struct AssetManager {
     pub block_upload_queue: Vec<TextureUpdate>,
     pub mask_upload_queue: Vec<TextureUpdate>,
     pub colormap_upload_queue: Vec<TextureUpdate>,
+    pub pending_updates: Vec<PendingUpdate>,
 
     pub texture_mapping_table: Vec<u32>,
     pub metadata_table: Vec<TextureMetadata>,
@@ -244,6 +247,7 @@ impl AssetManager {
                 block_upload_queue,
                 mask_upload_queue,
                 colormap_upload_queue,
+                pending_updates: Vec::new(),
 
                 texture_mapping_table,
                 metadata_table,
@@ -266,15 +270,17 @@ impl AssetManager {
                 continue;
             }
 
-            println!(
-                "Hot-reloaded asset: {:?}",
-                event.paths[0].file_name().unwrap()
-            );
-
             for path in event.paths {
+                if path.file_name().unwrap() == "shader.wgsl" {
+                    let shader_code = std::fs::read_to_string(&path).unwrap();
+                    self.pending_updates
+                        .push(PendingUpdate::MainShaderUpdate(shader_code));
+                    println!("Hot-reloaded shader: {:?}", path.file_name().unwrap());
+                }
+
                 if let Some(layer) = self.block_path_to_layer.get(&path).map(|r| *r) {
                     if let Ok(img) = image::open(&path) {
-                        self.push_block_update(layer, img); // error 1
+                        self.push_block_update(layer, img);
                         println!("Hot-reloaded block: {:?}", path.file_name().unwrap());
                     }
                 }
@@ -305,6 +311,12 @@ impl AssetManager {
                 }
             }
         }
+    }
+
+    pub fn receive_pending_updates(&mut self) -> Vec<PendingUpdate> {
+        let mut updates = Vec::new();
+        updates.append(&mut self.pending_updates.drain(..).collect());
+        updates
     }
 
     /// Clears the queues and shrinks them to fit.

@@ -29,6 +29,8 @@ pub struct Scene {
     global_uniforms: GlobalUniforms,
     texture_mapping_bind_group: wgpu::BindGroup,
     tables_bind_group: wgpu::BindGroup,
+    pipeline_layout: wgpu::PipelineLayout,
+    surface_format: wgpu::TextureFormat,
 }
 
 impl Scene {
@@ -137,7 +139,65 @@ impl Scene {
             global_uniforms,
             texture_mapping_bind_group: mapping_bind_group,
             tables_bind_group,
+            pipeline_layout,
+            surface_format,
         }
+    }
+
+    pub async fn replace_shader(
+        &mut self,
+        device: &wgpu::Device,
+        shader_source: &str,
+    ) -> Result<(), String> {
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Main Shader"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let info = shader_module.get_compilation_info().await;
+
+        let errors: Vec<_> = info
+            .messages
+            .iter()
+            .filter(|m| m.message_type == wgpu::CompilationMessageType::Error)
+            .collect();
+
+        if !errors.is_empty() {
+            let mut error_log = String::from("Shader compilation failed:\n");
+            for err in errors {
+                error_log.push_str(&format!("  At {:?}: {}\n", err.location, err.message));
+            }
+            return Err(error_log);
+        }
+
+        self.pipeline = Self::build_pipeline(
+            device,
+            self.surface_format,
+            PipelineTemplate {
+                label: "Main Render Pipeline",
+                poly_mode: wgpu::PolygonMode::Fill,
+                shader_module: &shader_module,
+                layout: &self.pipeline_layout,
+            },
+        );
+
+        #[cfg(debug_assertions)]
+        {
+            self.line_pipeline = Self::build_pipeline(
+                device,
+                self.surface_format,
+                PipelineTemplate {
+                    label: "Debug Line Pipeline",
+                    poly_mode: wgpu::PolygonMode::Line,
+                    shader_module: &shader_module,
+                    layout: &self.pipeline_layout,
+                },
+            );
+        }
+
+        Ok(())
     }
 }
 

@@ -139,3 +139,7 @@ impl Timings {
         );
     }
 }
+
+pub enum PendingUpdate {
+    MainShaderUpdate(String),
+}

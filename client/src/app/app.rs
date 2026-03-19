@@ -1,5 +1,8 @@
 use egui::{Align2, Color32};
-use engine_assets::{AssetManager, misc::AssetManagerMemory};
+use engine_assets::{
+    AssetManager,
+    misc::{AssetManagerMemory, PendingUpdate},
+};
 use engine_core::entity_pos::EntityPos;
 use engine_net::{
     client_actions::{ClientKeybindableActions, PlayerActions},
@@ -364,6 +367,19 @@ impl App {
         if let Some(asset_manager) = self.asset_manager.as_mut() {
             asset_manager.update_assets();
             renderer.update_assets(asset_manager);
+            let pending_updates = asset_manager.receive_pending_updates();
+            for update in pending_updates {
+                match update {
+                    PendingUpdate::MainShaderUpdate(code) => {
+                        pollster::block_on(async {
+                            let err = renderer.replace_shader(&code).await;
+                            if let Err(err) = err {
+                                eprintln!("Failed to replace shader: {}", err);
+                            }
+                        });
+                    }
+                }
+            }
         }
 
         let egui::FullOutput {
