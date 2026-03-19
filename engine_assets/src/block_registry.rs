@@ -92,6 +92,26 @@ impl BlockRegistry {
                         let mut texture_ids = Vec::new();
                         let mut colormap_mask_ids = Vec::new();
                         let block_path = project.path.join("textures/blocks");
+
+                        if let Some(c) = &face_config.colormap0 {
+                            colormap_registry.get_or_register_asset(&c.map, &project.path);
+                            colormap_queue.insert(
+                                project.path.join("textures/colormaps").join(&c.map.clone()),
+                            );
+                        }
+                        if let Some(c) = &face_config.colormap1 {
+                            colormap_registry.get_or_register_asset(&c.map, &project.path);
+                            colormap_queue.insert(
+                                project.path.join("textures/colormaps").join(&c.map.clone()),
+                            );
+                        }
+                        if let Some(c) = &face_config.colormap2 {
+                            colormap_registry.get_or_register_asset(&c.map, &project.path);
+                            colormap_queue.insert(
+                                project.path.join("textures/colormaps").join(&c.map.clone()),
+                            );
+                        }
+
                         for face in &face_config.faces {
                             // part 1 - handle regular textures
                             let full_tex_path = block_path.join(face.texture.clone());
@@ -200,25 +220,6 @@ impl BlockRegistry {
                             };
                             metadata
                         };
-
-                        if let Some(c) = &face_config.colormap0 {
-                            colormap_registry.get_or_register_asset(&c.map, &project.path);
-                            colormap_queue.insert(
-                                project.path.join("textures/colormaps").join(&c.map.clone()),
-                            );
-                        }
-                        if let Some(c) = &face_config.colormap1 {
-                            colormap_registry.get_or_register_asset(&c.map, &project.path);
-                            colormap_queue.insert(
-                                project.path.join("textures/colormaps").join(&c.map.clone()),
-                            );
-                        }
-                        if let Some(c) = &face_config.colormap2 {
-                            colormap_registry.get_or_register_asset(&c.map, &project.path);
-                            colormap_queue.insert(
-                                project.path.join("textures/colormaps").join(&c.map.clone()),
-                            );
-                        }
 
                         metadata_mapping_table.push(metadata);
                     }
