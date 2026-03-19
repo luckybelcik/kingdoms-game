@@ -44,4 +44,8 @@ impl Project {
         projects.sort(); // Ensure deterministic order
         projects
     }
+
+    pub fn estimate_heap(&self) -> usize {
+        self.name.capacity() + size_of::<String>() + self.path.capacity() + size_of::<PathBuf>()
+    }
 }

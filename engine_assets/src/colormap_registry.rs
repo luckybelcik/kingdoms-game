@@ -16,6 +16,9 @@ pub fn string_to_source_id(s: &str) -> u32 {
         "skylight" => 9,
         "light" => 10,
         "moonphase" => 11,
+        "random_white" => 12,
+        "random_perlin" => 13,
+        "random_blue" => 14,
         _ => {
             eprintln!("Warning: Unknown source '{}', defaulting to none.", s);
             0
@@ -25,18 +28,13 @@ pub fn string_to_source_id(s: &str) -> u32 {
 
 pub struct ColormapRegistry {
     pub colormaps: FxHashMap<String, u32>,
-    // Maps "elevation" -> 0, "humidity" -> 1, etc.
-    pub source_map: FxHashMap<String, u32>,
     pub unique_images: Vec<PathBuf>,
 }
 
 impl Default for ColormapRegistry {
     fn default() -> Self {
-        let mut source_map = FxHashMap::default();
-        source_map.insert("elevation".to_string(), 0);
         Self {
             colormaps: FxHashMap::default(),
-            source_map,
             unique_images: Vec::new(),
         }
     }
@@ -66,5 +64,16 @@ impl ColormapRegistry {
             .get(&path_str)
             .map(|idx| idx + 1)
             .unwrap_or(0)
+    }
+
+    pub fn estimate_heap(&self) -> usize {
+        let mut sum = 0;
+        for (name, _) in &self.colormaps {
+            sum += name.capacity() + size_of::<String>() + size_of::<u32>();
+        }
+        for path in &self.unique_images {
+            sum += path.capacity() + size_of::<PathBuf>();
+        }
+        sum
     }
 }

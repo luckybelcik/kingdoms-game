@@ -36,6 +36,56 @@ pub struct MaskRecipe {
     pub paths: [Option<PathBuf>; 3],
 }
 
+#[derive(Default)]
+pub struct AssetManagerMemory {
+    pub active_projects: usize,
+
+    pub block_registry: usize,
+    pub colormap_registry: usize,
+
+    pub block_path_to_layer: usize,
+    pub colormap_path_to_layer: usize,
+    pub mask_dependencies: usize,
+    pub active_mask_recipes: usize,
+
+    pub block_upload_queue: usize,
+    pub mask_upload_queue: usize,
+    pub colormap_upload_queue: usize,
+
+    pub texture_mapping_table: usize,
+    pub metadata_table: usize,
+    pub texture_variant_mapping_table: usize,
+    pub colormap_mask_variant_mapping_table: usize,
+
+    pub block_allocator: usize,
+    pub mask_allocator: usize,
+    pub colormap_allocator: usize,
+
+    pub total: usize,
+}
+
+impl AssetManagerMemory {
+    pub fn resolve_total(&mut self) {
+        self.total = self.active_projects
+            + self.block_registry
+            + self.colormap_registry
+            + self.block_path_to_layer
+            + self.colormap_path_to_layer
+            + self.mask_dependencies
+            + self.active_mask_recipes
+            + self.block_upload_queue
+            + self.mask_upload_queue
+            + self.colormap_upload_queue
+            + self.texture_mapping_table
+            + self.metadata_table
+            + self.texture_variant_mapping_table
+            + self.colormap_mask_variant_mapping_table
+            + self.block_allocator
+            + self.mask_allocator
+            + self.colormap_allocator;
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct Timings {
     pub project_finding: u128,

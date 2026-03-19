@@ -33,4 +33,8 @@ impl LayerAllocator {
     pub fn max_capacity(&self) -> u32 {
         self.max_capacity
     }
+
+    pub fn estimate_heap(&self) -> usize {
+        self.free_slots.capacity() * size_of::<u32>() + size_of::<u32>() + size_of::<u32>()
+    }
 }

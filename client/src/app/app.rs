@@ -1,5 +1,5 @@
 use egui::{Align2, Color32};
-use engine_assets::AssetManager;
+use engine_assets::{AssetManager, misc::AssetManagerMemory};
 use engine_core::entity_pos::EntityPos;
 use engine_net::{
     client_actions::{ClientKeybindableActions, PlayerActions},
@@ -433,9 +433,11 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
     let mut selected_block_id = 0;
 
     let mut block_list = Vec::new();
+    let mut asset_manager_mem = AssetManagerMemory::default();
 
     if let Some(asset_manager) = &app.asset_manager {
         block_list = asset_manager.block_registry.get_all_blocks();
+        asset_manager_mem = asset_manager.estimate_memory_usage();
         if let Some(client) = &app.client {
             if let Some(player_data) = client.get_plater_data() {
                 selected_block_id = player_data.selected_block;
@@ -603,7 +605,105 @@ fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16
                 );
             });
 
-            ui.heading("Memory Usage");
+            ui.heading("CPU Memory Usage");
+
+            ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "asset manager total: {}",
+                        asset_manager_mem.total
+                    ))
+                    .color(egui::Color32::LIGHT_RED),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "active projects: {}",
+                        asset_manager_mem.active_projects
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "block registry: {}",
+                        asset_manager_mem.block_registry
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "colormap registry: {}",
+                        asset_manager_mem.colormap_registry
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "block path to layer: {}",
+                        asset_manager_mem.block_path_to_layer
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "colormap path to layer: {}",
+                        asset_manager_mem.colormap_path_to_layer
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "mask dependencies: {}",
+                        asset_manager_mem.mask_dependencies
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "active mask recipes: {}",
+                        asset_manager_mem.active_mask_recipes
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "texture mapping table: {}",
+                        asset_manager_mem.texture_mapping_table
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "metadata table: {}",
+                        asset_manager_mem.metadata_table
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "texture variant mapping table: {}",
+                        asset_manager_mem.texture_variant_mapping_table
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "colormap mask variant mapping table: {}",
+                        asset_manager_mem.colormap_mask_variant_mapping_table
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "allocators: {}",
+                        asset_manager_mem.block_allocator
+                            + asset_manager_mem.mask_allocator
+                            + asset_manager_mem.colormap_allocator
+                    ))
+                    .color(egui::Color32::LIGHT_YELLOW),
+                );
+            });
+
+            ui.heading("GPU Memory Usage");
 
             ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
                 ui.label(

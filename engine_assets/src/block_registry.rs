@@ -283,4 +283,17 @@ impl BlockRegistry {
     pub fn get_block_count(&self) -> usize {
         self.name_to_id.len()
     }
+
+    pub fn estimate_heap(&self) -> usize {
+        let mut sum = self.properties.capacity() * size_of::<BlockProperties>();
+
+        for (name, _) in &self.name_to_id {
+            sum += name.capacity() + size_of::<String>() + size_of::<u16>();
+        }
+
+        for name in &self.id_to_name {
+            sum += name.capacity() + size_of::<String>();
+        }
+        sum
+    }
 }

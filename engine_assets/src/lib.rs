@@ -19,7 +19,7 @@ use crate::{
     block_registry::BlockRegistry,
     colormap_registry::ColormapRegistry,
     layer_allocator::LayerAllocator,
-    misc::{AssetSlopConfig, MaskRecipe, TextureUpdate, Timings},
+    misc::{AssetManagerMemory, AssetSlopConfig, MaskRecipe, TextureUpdate, Timings},
     projects::Project,
     rendering::TextureMetadata,
 };
@@ -364,6 +364,59 @@ impl AssetManager {
             });
         }
     }
+
+    pub fn estimate_memory_usage(&self) -> AssetManagerMemory {
+        let mut memory = AssetManagerMemory::default();
+
+        for project in &self.active_projects {
+            memory.active_projects += project.estimate_heap();
+        }
+
+        memory.block_registry = self.block_registry.estimate_heap();
+        memory.colormap_registry = self.colormap_registry.estimate_heap();
+
+        // estimation, guys. we don't really know.
+        memory.block_path_to_layer = estimate_dashmap_path_u32(&self.block_path_to_layer);
+        memory.colormap_path_to_layer = estimate_dashmap_path_u32(&self.colormap_path_to_layer);
+
+        for entry in self.mask_dependencies.iter() {
+            memory.mask_dependencies += size_of::<PathBuf>() + entry.key().capacity();
+            memory.mask_dependencies +=
+                size_of::<Vec<u32>>() + (entry.value().capacity() * size_of::<u32>());
+        }
+
+        for entry in self.active_mask_recipes.iter() {
+            memory.active_mask_recipes += size_of::<u32>();
+            for option_path in &entry.value().paths {
+                if let Some(path) = option_path {
+                    memory.active_mask_recipes += size_of::<PathBuf>() + path.capacity();
+                } else {
+                    memory.active_mask_recipes += size_of::<Option<PathBuf>>();
+                }
+            }
+        }
+
+        memory.texture_mapping_table =
+            self.texture_mapping_table.capacity() * size_of::<u32>() + size_of::<Vec<u32>>();
+        memory.metadata_table = self.metadata_table.capacity() * size_of::<TextureMetadata>();
+        memory.texture_variant_mapping_table =
+            self.texture_variant_mapping_table.capacity() * size_of::<u32>();
+        memory.texture_mapping_table =
+            self.colormap_mask_variant_mapping_table.capacity() * size_of::<u32>();
+
+        memory.mask_upload_queue = size_of::<Vec<TextureUpdate>>();
+        memory.block_upload_queue = size_of::<Vec<TextureUpdate>>();
+        memory.colormap_upload_queue = size_of::<Vec<TextureUpdate>>();
+
+        memory.block_allocator += self.block_allocator.estimate_heap();
+        memory.mask_allocator += self.mask_allocator.estimate_heap();
+        memory.colormap_allocator += self.colormap_allocator.estimate_heap();
+
+        memory.resolve_total();
+        memory.total += size_of::<Self>();
+
+        memory
+    }
 }
 
 fn bake_mask_from_recipe(recipe: &MaskRecipe) -> GrayImage {
@@ -417,4 +470,12 @@ pub fn blend_masks(
     });
 
     out
+}
+
+fn estimate_dashmap_path_u32(map: &DashMap<PathBuf, u32, FxBuildHasher>) -> usize {
+    let mut sum = 0;
+    for entry in map.iter() {
+        sum += entry.key().capacity() + size_of::<PathBuf>() + size_of::<u32>();
+    }
+    sum
 }
