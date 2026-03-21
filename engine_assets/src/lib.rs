@@ -217,8 +217,8 @@ impl AssetManager {
         }
 
         if let Some(active_colormap_masks_textures) = &mut active_colormap_masks_textures {
-            for colormap in &colormap_upload_queue {
-                active_colormap_masks_textures.push(colormap.data.clone());
+            for colormap_mask in &mask_upload_queue {
+                active_colormap_masks_textures.push(colormap_mask.data.clone());
             }
         }
 
