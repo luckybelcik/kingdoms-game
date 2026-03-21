@@ -38,16 +38,18 @@ pub mod rendering;
 pub struct AssetManager {
     pub active_projects: Vec<Project>,
 
+    pub active_block_textures: Option<Vec<DynamicImage>>,
+
     pub block_registry: BlockRegistry,
     pub colormap_registry: ColormapRegistry,
 
     pub block_path_to_layer: DashMap<PathBuf, u32, FxBuildHasher>,
     pub colormap_path_to_layer: DashMap<PathBuf, u32, FxBuildHasher>,
-    pub mask_dependencies: DashMap<PathBuf, Vec<u32>, FxBuildHasher>,
+    pub colormap_mask_dependencies: DashMap<PathBuf, Vec<u32>, FxBuildHasher>,
     pub active_mask_recipes: DashMap<u32, MaskRecipe, FxBuildHasher>,
 
     pub block_upload_queue: Vec<TextureUpdate>,
-    pub mask_upload_queue: Vec<TextureUpdate>,
+    pub colormap_mask_upload_queue: Vec<TextureUpdate>,
     pub colormap_upload_queue: Vec<TextureUpdate>,
     pub pending_updates: Vec<PendingUpdate>,
 
@@ -57,7 +59,7 @@ pub struct AssetManager {
     pub colormap_mask_variant_mapping_table: Vec<u32>,
 
     pub block_allocator: LayerAllocator,
-    pub mask_allocator: LayerAllocator,
+    pub colormap_mask_allocator: LayerAllocator,
     pub colormap_allocator: LayerAllocator,
 
     pub watch_receiver: Receiver<notify::Result<notify::Event>>,
@@ -67,6 +69,7 @@ impl AssetManager {
     pub fn init(
         load_projects: Option<Vec<String>>,
         load_native_by_default: bool,
+        store_textures: bool,
     ) -> (AssetManager, Timings) {
         let mut project_timings = Timings::default();
         let start_time = Instant::now();
@@ -105,6 +108,11 @@ impl AssetManager {
 
         project_timings.project_finding = start_time.elapsed().as_nanos();
         project_timings.total = project_timings.project_finding;
+
+        let mut active_block_textures = None;
+        if store_textures {
+            active_block_textures = Some(Vec::new());
+        }
 
         let block_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
         let colormap_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
@@ -196,6 +204,12 @@ impl AssetManager {
             },
         );
 
+        if let Some(active_block_textures) = &mut active_block_textures {
+            for block in &block_upload_queue {
+                active_block_textures.push(block.data.clone());
+            }
+        }
+
         project_timings.image_loading = start_time.elapsed().as_nanos() - project_timings.total;
         project_timings.total += project_timings.image_loading;
 
@@ -236,16 +250,18 @@ impl AssetManager {
             AssetManager {
                 active_projects: loaded_projects,
 
+                active_block_textures,
+
                 block_registry,
                 colormap_registry: colormap_registry.unwrap(),
 
                 block_path_to_layer,
                 colormap_path_to_layer,
-                mask_dependencies,
+                colormap_mask_dependencies: mask_dependencies,
                 active_mask_recipes,
 
                 block_upload_queue,
-                mask_upload_queue,
+                colormap_mask_upload_queue: mask_upload_queue,
                 colormap_upload_queue,
                 pending_updates: Vec::new(),
 
@@ -255,7 +271,7 @@ impl AssetManager {
                 colormap_mask_variant_mapping_table,
 
                 block_allocator,
-                mask_allocator,
+                colormap_mask_allocator: mask_allocator,
                 colormap_allocator,
 
                 watch_receiver: rx,
@@ -285,7 +301,10 @@ impl AssetManager {
                     }
                 }
 
-                let layers = self.mask_dependencies.get(&path).map(|r| r.clone());
+                let layers = self
+                    .colormap_mask_dependencies
+                    .get(&path)
+                    .map(|r| r.clone());
 
                 if let Some(layers) = layers {
                     for layer in layers {
@@ -322,11 +341,11 @@ impl AssetManager {
     /// Clears the queues and shrinks them to fit.
     pub fn clear_queues(&mut self) {
         self.block_upload_queue.clear();
-        self.mask_upload_queue.clear();
+        self.colormap_mask_upload_queue.clear();
         self.colormap_upload_queue.clear();
 
         self.block_upload_queue.shrink_to_fit();
-        self.mask_upload_queue.shrink_to_fit();
+        self.colormap_mask_upload_queue.shrink_to_fit();
         self.colormap_upload_queue.shrink_to_fit();
     }
 
@@ -336,8 +355,14 @@ impl AssetManager {
             .iter_mut()
             .find(|u| u.layer_index == layer)
         {
+            if let Some(textures) = &mut self.active_block_textures {
+                textures[layer as usize] = data.clone();
+            };
             existing.data = data;
         } else {
+            if let Some(textures) = &mut self.active_block_textures {
+                textures[layer as usize] = data.clone();
+            };
             self.block_upload_queue.push(TextureUpdate {
                 layer_index: layer,
                 data,
@@ -349,13 +374,13 @@ impl AssetManager {
         let dynamic_data = DynamicImage::ImageLuma8(data);
 
         if let Some(existing) = self
-            .mask_upload_queue
+            .colormap_mask_upload_queue
             .iter_mut()
             .find(|u| u.layer_index == layer)
         {
             existing.data = dynamic_data;
         } else {
-            self.mask_upload_queue.push(TextureUpdate {
+            self.colormap_mask_upload_queue.push(TextureUpdate {
                 layer_index: layer,
                 data: dynamic_data,
             });
@@ -391,7 +416,7 @@ impl AssetManager {
         memory.block_path_to_layer = estimate_dashmap_path_u32(&self.block_path_to_layer);
         memory.colormap_path_to_layer = estimate_dashmap_path_u32(&self.colormap_path_to_layer);
 
-        for entry in self.mask_dependencies.iter() {
+        for entry in self.colormap_mask_dependencies.iter() {
             memory.mask_dependencies += size_of::<PathBuf>() + entry.key().capacity();
             memory.mask_dependencies +=
                 size_of::<Vec<u32>>() + (entry.value().capacity() * size_of::<u32>());
@@ -421,7 +446,7 @@ impl AssetManager {
         memory.colormap_upload_queue = size_of::<Vec<TextureUpdate>>();
 
         memory.block_allocator += self.block_allocator.estimate_heap();
-        memory.mask_allocator += self.mask_allocator.estimate_heap();
+        memory.mask_allocator += self.colormap_mask_allocator.estimate_heap();
         memory.colormap_allocator += self.colormap_allocator.estimate_heap();
 
         memory.resolve_total();

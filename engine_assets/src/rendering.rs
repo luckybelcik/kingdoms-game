@@ -14,6 +14,7 @@ pub struct TextureMetadata {
     // each ids has 5 bits, 2 bits for texture flipping (bit 31 is X bit 32 is Y)
     pub packed_source_ids_and_flipbits: u32,
     // 1st bit = use texture variants, 2nd bit = use colormap mask variants
+    // last 16 bits = index into additional mask array
     pub additional_meta: u32,
 }
 

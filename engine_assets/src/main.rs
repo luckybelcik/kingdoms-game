@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let start_time = Instant::now();
 
     for _ in 0..50 {
-        let asset_manager_timings = AssetManager::init(None, true).1;
+        let asset_manager_timings = AssetManager::init(None, true, false).1;
         master_timings.add(&asset_manager_timings);
     }
 

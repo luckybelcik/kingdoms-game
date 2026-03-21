@@ -37,11 +37,11 @@ impl TextureManager {
                 queue,
                 "Mask Array",
                 asset_manager
-                    .mask_upload_queue
+                    .colormap_mask_upload_queue
                     .iter()
                     .map(|texture| &texture.data)
                     .collect(),
-                asset_manager.mask_allocator.max_capacity(),
+                asset_manager.colormap_mask_allocator.max_capacity(),
                 TILE_SIZE_PIXELS,
                 1,
                 wgpu::TextureFormat::R8Uint,
@@ -76,7 +76,7 @@ impl TextureManager {
             self.block_array
                 .upload_layer(queue, &update.data, update.layer_index)
         }
-        for update in &asset_manager.mask_upload_queue {
+        for update in &asset_manager.colormap_mask_upload_queue {
             self.mask_array
                 .upload_layer(queue, &update.data, update.layer_index)
         }
