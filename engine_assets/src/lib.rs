@@ -39,6 +39,8 @@ pub struct AssetManager {
     pub active_projects: Vec<Project>,
 
     pub active_block_textures: Option<Vec<DynamicImage>>,
+    pub active_colormap_masks_textures: Option<Vec<DynamicImage>>,
+    pub active_colormap_textures: Option<Vec<DynamicImage>>,
 
     pub block_registry: BlockRegistry,
     pub colormap_registry: ColormapRegistry,
@@ -110,8 +112,12 @@ impl AssetManager {
         project_timings.total = project_timings.project_finding;
 
         let mut active_block_textures = None;
+        let mut active_colormap_masks_textures = None;
+        let mut active_colormap_textures = None;
         if store_textures {
             active_block_textures = Some(Vec::new());
+            active_colormap_masks_textures = Some(Vec::new());
+            active_colormap_textures = Some(Vec::new());
         }
 
         let block_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
@@ -210,6 +216,18 @@ impl AssetManager {
             }
         }
 
+        if let Some(active_colormap_masks_textures) = &mut active_colormap_masks_textures {
+            for colormap in &colormap_upload_queue {
+                active_colormap_masks_textures.push(colormap.data.clone());
+            }
+        }
+
+        if let Some(active_colormap_textures) = &mut active_colormap_textures {
+            for colormap in &colormap_upload_queue {
+                active_colormap_textures.push(colormap.data.clone());
+            }
+        }
+
         project_timings.image_loading = start_time.elapsed().as_nanos() - project_timings.total;
         project_timings.total += project_timings.image_loading;
 
@@ -251,6 +269,8 @@ impl AssetManager {
                 active_projects: loaded_projects,
 
                 active_block_textures,
+                active_colormap_masks_textures,
+                active_colormap_textures,
 
                 block_registry,
                 colormap_registry: colormap_registry.unwrap(),
@@ -378,8 +398,14 @@ impl AssetManager {
             .iter_mut()
             .find(|u| u.layer_index == layer)
         {
+            if let Some(colormap_masks) = &mut self.active_colormap_masks_textures {
+                colormap_masks[layer as usize] = dynamic_data.clone();
+            };
             existing.data = dynamic_data;
         } else {
+            if let Some(colormap_masks) = &mut self.active_colormap_masks_textures {
+                colormap_masks[layer as usize] = dynamic_data.clone();
+            };
             self.colormap_mask_upload_queue.push(TextureUpdate {
                 layer_index: layer,
                 data: dynamic_data,
@@ -393,8 +419,14 @@ impl AssetManager {
             .iter_mut()
             .find(|u| u.layer_index == layer)
         {
+            if let Some(colormaps) = &mut self.active_colormap_textures {
+                colormaps[layer as usize] = data.clone();
+            };
             existing.data = data;
         } else {
+            if let Some(colormaps) = &mut self.active_colormap_textures {
+                colormaps[layer as usize] = data.clone();
+            };
             self.colormap_upload_queue.push(TextureUpdate {
                 layer_index: layer,
                 data,
@@ -407,6 +439,24 @@ impl AssetManager {
 
         for project in &self.active_projects {
             memory.active_projects += project.estimate_heap();
+        }
+
+        if let Some(blocks) = &self.active_block_textures {
+            for image in blocks {
+                memory.active_block_textures += (image.width() * image.height() * 4) as usize;
+            }
+        }
+
+        if let Some(colormaps) = &self.active_colormap_textures {
+            for image in colormaps {
+                memory.active_colormap_textures += (image.width() * image.height() * 4) as usize;
+            }
+        }
+
+        if let Some(colormap_masks) = &self.active_colormap_masks_textures {
+            for image in colormap_masks {
+                memory.active_colormap_masks_textures += (image.width() * image.height()) as usize;
+            }
         }
 
         memory.block_registry = self.block_registry.estimate_heap();
