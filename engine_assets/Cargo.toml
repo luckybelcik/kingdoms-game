@@ -14,3 +14,4 @@ bytemuck = { workspace = true }
 rayon = { workspace = true }
 notify = "8.2.0"
 dashmap = { version = "6.1.0", features = ["rayon"] }
+walkdir = "2.5.0"

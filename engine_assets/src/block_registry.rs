@@ -2,6 +2,7 @@ use std::{collections::BTreeSet, path::PathBuf};
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rustc_hash::FxHashMap;
+use walkdir::WalkDir;
 
 use crate::{
     block_properties::BlockProperties,
@@ -38,11 +39,27 @@ impl BlockRegistry {
         let parsed_projects: Vec<_> = projects
             .into_par_iter()
             .filter_map(|project| {
-                let toml_path = project.path.join("blocks.toml");
-                let file_content = std::fs::read_to_string(&toml_path).ok()?;
-                let manifest: BlockManifest = toml::from_str(&file_content).expect("Invalid TOML");
+                let paths: Vec<PathBuf> = WalkDir::new(&project.path)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.path().file_name().map_or(false, |name| {
+                            name.to_string_lossy().ends_with("_blocks.toml")
+                        })
+                    })
+                    .map(|e| e.into_path())
+                    .collect();
 
-                Some((project, manifest))
+                let manifests: Vec<BlockManifest> = paths
+                    .into_par_iter()
+                    .map(|path| {
+                        let file_content =
+                            std::fs::read_to_string(&path).unwrap_or_else(|_| String::new());
+                        toml::from_str(&file_content).unwrap()
+                    })
+                    .collect();
+
+                Some((project, manifests))
             })
             .collect();
 
@@ -74,165 +91,174 @@ impl BlockRegistry {
             },
         );
 
-        for (project, manifest) in parsed_projects {
-            for block in manifest.blocks {
-                let full_id = if block.id.contains(':') {
-                    block.id.clone()
-                } else {
-                    format!("{}:{}", project.name, block.id)
-                };
-
-                if include_assets {
-                    let face_configs = match &block.faces {
-                        FacesOptions::Unified(path) => [
-                            FaceConfigWithVariants::simple_from_path(path),
-                            FaceConfigWithVariants::simple_from_path(path),
-                            FaceConfigWithVariants::simple_from_path(path),
-                            FaceConfigWithVariants::simple_from_path(path),
-                            FaceConfigWithVariants::simple_from_path(path),
-                            FaceConfigWithVariants::simple_from_path(path),
-                        ],
-                        FacesOptions::Unique(texture_config) => texture_config.resolve_faces(),
+        for (project, manifests) in parsed_projects {
+            for manifest in manifests {
+                for block in manifest.blocks {
+                    let full_id = if block.id.contains(':') {
+                        block.id.clone()
+                    } else {
+                        format!("{}:{}", project.name, block.id)
                     };
 
-                    for face_config in face_configs {
-                        let mut texture_ids = Vec::new();
-                        let mut colormap_mask_ids = Vec::new();
-                        let block_path = project.path.join("textures/blocks");
-
-                        if let Some(c) = &face_config.colormap0 {
-                            colormap_registry.get_or_register_asset(&c.map, &project.path);
-                            colormap_queue.insert(
-                                project.path.join("textures/colormaps").join(&c.map.clone()),
-                            );
-                        }
-                        if let Some(c) = &face_config.colormap1 {
-                            colormap_registry.get_or_register_asset(&c.map, &project.path);
-                            colormap_queue.insert(
-                                project.path.join("textures/colormaps").join(&c.map.clone()),
-                            );
-                        }
-                        if let Some(c) = &face_config.colormap2 {
-                            colormap_registry.get_or_register_asset(&c.map, &project.path);
-                            colormap_queue.insert(
-                                project.path.join("textures/colormaps").join(&c.map.clone()),
-                            );
-                        }
-
-                        for face in &face_config.faces {
-                            // part 1 - handle regular textures
-                            let full_tex_path = block_path.join(face.texture.clone());
-
-                            // get texture id
-                            let texture_id = *texture_to_id
-                                .entry(full_tex_path.clone())
-                                .or_insert_with(|| {
-                                    let idx = block_texture_queue.len() as u32;
-                                    block_texture_queue.push(full_tex_path.clone());
-                                    idx
-                                });
-
-                            texture_ids.push(texture_id);
-
-                            // part 2 - handle colormap masks
-                            // basically the if logic is if any paired colormap mask and colormap definitions exist
-                            let colormap_mask_id = if (face.colormap0_mask.is_some()
-                                && face_config.colormap0.is_some())
-                                || (face.colormap1_mask.is_some()
-                                    && face_config.colormap1.is_some())
-                                || (face.colormap2_mask.is_some()
-                                    && face_config.colormap2.is_some())
-                            {
-                                let recipe = MaskRecipe {
-                                    paths: [
-                                        face.colormap0_mask.as_ref().map(|c| block_path.join(&c)),
-                                        face.colormap1_mask.as_ref().map(|c| block_path.join(&c)),
-                                        face.colormap2_mask.as_ref().map(|c| block_path.join(&c)),
-                                    ],
-                                };
-
-                                *mask_to_id.entry(recipe.clone()).or_insert_with(|| {
-                                    let idx = mask_recipes_queue.len() as u32;
-                                    mask_recipes_queue.push(recipe);
-                                    idx
-                                }) + 1
-                            } else {
-                                0
-                            };
-
-                            colormap_mask_ids.push(colormap_mask_id);
-                        }
-
-                        if texture_ids.len() != colormap_mask_ids.len()
-                            && colormap_mask_ids.len() != 0
-                        {
-                            panic!(
-                                "The texture count should be equal to the colormap mask count if colormaps are used. Faulty project: {}",
-                                project.name
-                            );
-                        }
-
-                        // we do this cause otherwise texture_ids is out of scope in the metadata part
-                        let texture_id_len = texture_ids.len();
-
-                        // if len is 1, use the texture id directly
-                        // otherwise, use the variant data
-                        // this is basically some union action!! :3 yay yay jump jump
-                        // also it's kinda hard to wrap your head around it so don't worry guys
-                        if texture_id_len == 1 {
-                            texture_or_variant_mapping_table.push(texture_ids[0]);
-                        } else {
-                            let texture_count = texture_id_len;
-                            let variant_table_offset = texture_variant_mapping_table.len();
-                            let variant_data =
-                                (texture_count as u32) << 28 | variant_table_offset as u32;
-                            texture_or_variant_mapping_table.push(variant_data);
-                            texture_variant_mapping_table.append(&mut texture_ids);
-                        }
-
-                        let fully_random_faces_bit =
-                            (face_config.fully_random_faces.unwrap_or(false) as u32) << 2;
-
-                        // same deal as the texture ids
-                        let metadata = if colormap_mask_ids.len() == 1 {
-                            let multiple_textures_bit = (texture_id_len > 1) as u32;
-                            let metadata = TextureMetadata {
-                                packed_colormap_ids: pack_colormap_ids(
-                                    &face_config,
-                                    &colormap_registry,
-                                    &project.path,
-                                ),
-                                mask_atlas_id: colormap_mask_ids[0],
-                                packed_source_ids_and_flipbits: pack_sources(&face_config),
-                                additional_meta: multiple_textures_bit | fully_random_faces_bit,
-                            };
-                            metadata
-                        } else {
-                            let mask_count = colormap_mask_ids.len();
-                            let variant_table_offset = colormap_mask_variant_mapping_table.len();
-                            let variant_data =
-                                (mask_count as u32) << 28 | variant_table_offset as u32;
-
-                            colormap_mask_variant_mapping_table.append(&mut colormap_mask_ids);
-
-                            let metadata = TextureMetadata {
-                                packed_colormap_ids: pack_colormap_ids(
-                                    &face_config,
-                                    &colormap_registry,
-                                    &project.path,
-                                ),
-                                mask_atlas_id: variant_data,
-                                packed_source_ids_and_flipbits: pack_sources(&face_config),
-                                additional_meta: 3 | fully_random_faces_bit, // 3 because 2 first bits flipped
-                            };
-                            metadata
+                    if include_assets {
+                        let face_configs = match &block.faces {
+                            FacesOptions::Unified(path) => [
+                                FaceConfigWithVariants::simple_from_path(path),
+                                FaceConfigWithVariants::simple_from_path(path),
+                                FaceConfigWithVariants::simple_from_path(path),
+                                FaceConfigWithVariants::simple_from_path(path),
+                                FaceConfigWithVariants::simple_from_path(path),
+                                FaceConfigWithVariants::simple_from_path(path),
+                            ],
+                            FacesOptions::Unique(texture_config) => texture_config.resolve_faces(),
                         };
 
-                        metadata_mapping_table.push(metadata);
-                    }
-                }
+                        for face_config in face_configs {
+                            let mut texture_ids = Vec::new();
+                            let mut colormap_mask_ids = Vec::new();
+                            let block_path = project.path.join("textures/blocks");
 
-                registry.register_block(full_id, block);
+                            if let Some(c) = &face_config.colormap0 {
+                                colormap_registry.get_or_register_asset(&c.map, &project.path);
+                                colormap_queue.insert(
+                                    project.path.join("textures/colormaps").join(&c.map.clone()),
+                                );
+                            }
+                            if let Some(c) = &face_config.colormap1 {
+                                colormap_registry.get_or_register_asset(&c.map, &project.path);
+                                colormap_queue.insert(
+                                    project.path.join("textures/colormaps").join(&c.map.clone()),
+                                );
+                            }
+                            if let Some(c) = &face_config.colormap2 {
+                                colormap_registry.get_or_register_asset(&c.map, &project.path);
+                                colormap_queue.insert(
+                                    project.path.join("textures/colormaps").join(&c.map.clone()),
+                                );
+                            }
+
+                            for face in &face_config.faces {
+                                // part 1 - handle regular textures
+                                let full_tex_path = block_path.join(face.texture.clone());
+
+                                // get texture id
+                                let texture_id = *texture_to_id
+                                    .entry(full_tex_path.clone())
+                                    .or_insert_with(|| {
+                                        let idx = block_texture_queue.len() as u32;
+                                        block_texture_queue.push(full_tex_path.clone());
+                                        idx
+                                    });
+
+                                texture_ids.push(texture_id);
+
+                                // part 2 - handle colormap masks
+                                // basically the if logic is if any paired colormap mask and colormap definitions exist
+                                let colormap_mask_id = if (face.colormap0_mask.is_some()
+                                    && face_config.colormap0.is_some())
+                                    || (face.colormap1_mask.is_some()
+                                        && face_config.colormap1.is_some())
+                                    || (face.colormap2_mask.is_some()
+                                        && face_config.colormap2.is_some())
+                                {
+                                    let recipe = MaskRecipe {
+                                        paths: [
+                                            face.colormap0_mask
+                                                .as_ref()
+                                                .map(|c| block_path.join(&c)),
+                                            face.colormap1_mask
+                                                .as_ref()
+                                                .map(|c| block_path.join(&c)),
+                                            face.colormap2_mask
+                                                .as_ref()
+                                                .map(|c| block_path.join(&c)),
+                                        ],
+                                    };
+
+                                    *mask_to_id.entry(recipe.clone()).or_insert_with(|| {
+                                        let idx = mask_recipes_queue.len() as u32;
+                                        mask_recipes_queue.push(recipe);
+                                        idx
+                                    }) + 1
+                                } else {
+                                    0
+                                };
+
+                                colormap_mask_ids.push(colormap_mask_id);
+                            }
+
+                            if texture_ids.len() != colormap_mask_ids.len()
+                                && colormap_mask_ids.len() != 0
+                            {
+                                panic!(
+                                    "The texture count should be equal to the colormap mask count if colormaps are used. Faulty project: {}",
+                                    project.name
+                                );
+                            }
+
+                            // we do this cause otherwise texture_ids is out of scope in the metadata part
+                            let texture_id_len = texture_ids.len();
+
+                            // if len is 1, use the texture id directly
+                            // otherwise, use the variant data
+                            // this is basically some union action!! :3 yay yay jump jump
+                            // also it's kinda hard to wrap your head around it so don't worry guys
+                            if texture_id_len == 1 {
+                                texture_or_variant_mapping_table.push(texture_ids[0]);
+                            } else {
+                                let texture_count = texture_id_len;
+                                let variant_table_offset = texture_variant_mapping_table.len();
+                                let variant_data =
+                                    (texture_count as u32) << 28 | variant_table_offset as u32;
+                                texture_or_variant_mapping_table.push(variant_data);
+                                texture_variant_mapping_table.append(&mut texture_ids);
+                            }
+
+                            let fully_random_faces_bit =
+                                (face_config.fully_random_faces.unwrap_or(false) as u32) << 2;
+
+                            // same deal as the texture ids
+                            let metadata = if colormap_mask_ids.len() == 1 {
+                                let multiple_textures_bit = (texture_id_len > 1) as u32;
+                                let metadata = TextureMetadata {
+                                    packed_colormap_ids: pack_colormap_ids(
+                                        &face_config,
+                                        &colormap_registry,
+                                        &project.path,
+                                    ),
+                                    mask_atlas_id: colormap_mask_ids[0],
+                                    packed_source_ids_and_flipbits: pack_sources(&face_config),
+                                    additional_meta: multiple_textures_bit | fully_random_faces_bit,
+                                };
+                                metadata
+                            } else {
+                                let mask_count = colormap_mask_ids.len();
+                                let variant_table_offset =
+                                    colormap_mask_variant_mapping_table.len();
+                                let variant_data =
+                                    (mask_count as u32) << 28 | variant_table_offset as u32;
+
+                                colormap_mask_variant_mapping_table.append(&mut colormap_mask_ids);
+
+                                let metadata = TextureMetadata {
+                                    packed_colormap_ids: pack_colormap_ids(
+                                        &face_config,
+                                        &colormap_registry,
+                                        &project.path,
+                                    ),
+                                    mask_atlas_id: variant_data,
+                                    packed_source_ids_and_flipbits: pack_sources(&face_config),
+                                    additional_meta: 3 | fully_random_faces_bit, // 3 because 2 first bits flipped
+                                };
+                                metadata
+                            };
+
+                            metadata_mapping_table.push(metadata);
+                        }
+                    }
+
+                    registry.register_block(full_id, block);
+                }
             }
 
             loaded_projects.push(project);
