@@ -8,8 +8,8 @@ pub struct AppInfo {
     pub chunk_count: u64,
     pub total_chunk_vram: u64,
     pub avg_chunk_vram: u64,
-    pub delta_history: VecDeque<u16>,
-    pub avg_fps_history: VecDeque<u16>,
+    pub delta_history: VecDeque<u64>,
+    pub avg_fps_history: VecDeque<u64>,
     pub accumulator: f64,
     pub tick: u128,
 }

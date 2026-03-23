@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let start_time = Instant::now();
 
     for _ in 0..50 {
-        let results = AssetManager::init(None, true, true);
+        let results = AssetManager::init(None, true, true).unwrap();
         master_timings.add(&results.1);
         master_asset_manager = Some(results.0);
     }

@@ -12,7 +12,7 @@ use std::{
 };
 
 use dashmap::DashMap;
-use image::{DynamicImage, GrayImage, ImageFormat};
+use image::{DynamicImage, GrayImage, ImageError, ImageFormat};
 use lasso::{Spur, ThreadedRodeo};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::iter::{
@@ -84,7 +84,7 @@ impl AssetManager {
         load_projects: Option<Vec<String>>,
         load_native_by_default: bool,
         store_textures: bool,
-    ) -> (AssetManager, Timings) {
+    ) -> Result<(AssetManager, Timings), String> {
         let mut project_timings = Timings::default();
         let start_time = Instant::now();
         let interner = Arc::new(ThreadedRodeo::default());
@@ -95,7 +95,7 @@ impl AssetManager {
             if let Some(native) = Project::find("native") {
                 projects_to_load.push(native);
             } else {
-                panic!("Critical Error: 'native' project not found!");
+                return Err("Critical Error: 'native' project not found!".to_string());
             }
         }
 
@@ -148,7 +148,10 @@ impl AssetManager {
             start_time.elapsed().as_nanos() - project_timings.total;
         project_timings.total += project_timings.block_registry_init;
 
-        let ((block_upload_queue, colormap_upload_queue), colormap_mask_upload_queue) = rayon::join(
+        let (
+            (block_upload_queue_result, colormap_upload_queue_result),
+            colormap_mask_upload_queue_result,
+        ) = rayon::join(
             || {
                 rayon::join(
                     || {
@@ -157,19 +160,18 @@ impl AssetManager {
                             .into_par_iter()
                             .enumerate()
                             .map(|(i, p)| {
-                                let bytes = fs::read(&p).expect("Failed to read file");
+                                let bytes = fs::read(&p)?;
                                 let image =
-                                    image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
-                                        .expect("Failed to load block texture");
+                                    image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)?;
                                 let update = TextureUpdate {
                                     layer_index: i as u32,
                                     data: image,
                                 };
                                 block_path_to_layer
                                     .insert(EnginePath::from_path(&p, &interner), i as u32);
-                                update
+                                Ok(update)
                             })
-                            .collect::<Vec<_>>()
+                            .collect::<Result<Vec<_>, ImageError>>()
                     },
                     || {
                         let colormap_texture_paths = block_registry_context
@@ -180,19 +182,18 @@ impl AssetManager {
                             .into_par_iter()
                             .enumerate()
                             .map(|(i, p)| {
-                                let bytes = fs::read(&p).expect("Failed to read file");
+                                let bytes = fs::read(&p)?;
                                 let image =
-                                    image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
-                                        .expect("Failed to load block texture");
+                                    image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)?;
                                 let update = TextureUpdate {
                                     layer_index: i as u32,
                                     data: image,
                                 };
                                 colormap_path_to_layer
                                     .insert(EnginePath::from_path(&p, &interner), i as u32);
-                                update
+                                Ok(update)
                             })
-                            .collect::<Vec<_>>()
+                            .collect::<Result<Vec<_>, ImageError>>()
                     },
                 )
             },
@@ -211,16 +212,25 @@ impl AssetManager {
                         }
                         active_mask_recipes.insert(layer_idx, recipe.clone());
 
-                        TextureUpdate {
+                        let data =
+                            DynamicImage::ImageLuma8(bake_mask_from_recipe(&recipe, &interner)?);
+
+                        Ok(TextureUpdate {
                             layer_index: layer_idx,
-                            data: DynamicImage::ImageLuma8(bake_mask_from_recipe(
-                                &recipe, &interner,
-                            )),
-                        }
+                            data,
+                        })
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Result<Vec<_>, ImageError>>()
             },
         );
+
+        let (Ok(block_upload_queue), Ok(colormap_upload_queue), Ok(colormap_mask_upload_queue)) = (
+            block_upload_queue_result,
+            colormap_upload_queue_result,
+            colormap_mask_upload_queue_result,
+        ) else {
+            return Err("Failed to upload block or colormap mask textures".to_string());
+        };
 
         if let Some(active_block_textures) = &mut active_block_textures {
             for block in &block_upload_queue {
@@ -288,7 +298,7 @@ impl AssetManager {
         project_timings.watcher_setup = start_time.elapsed().as_nanos() - project_timings.total;
         project_timings.total += project_timings.watcher_setup;
 
-        (
+        Ok((
             AssetManager {
                 active_projects: block_registry_context.loaded_projects,
 
@@ -323,7 +333,7 @@ impl AssetManager {
                 interner,
             },
             project_timings,
-        )
+        ))
     }
 
     pub fn update_assets(&mut self) {
@@ -339,6 +349,20 @@ impl AssetManager {
                             .push(PendingUpdate::MainShaderUpdate(shader_code));
                         println!("Hot-reloaded shader: {:?}", path.file_name().unwrap());
                     }
+                }
+
+                if path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .ends_with("_blocks.toml")
+                {
+                    self.pending_updates.push(PendingUpdate::ManagerReload);
+                    println!(
+                        "Reloaded asset manager becase of: {:?}",
+                        path.file_name().unwrap()
+                    );
                 }
 
                 if let Some(layer) = self
@@ -362,7 +386,7 @@ impl AssetManager {
                         if let Some(recipe) =
                             self.active_mask_recipes.get(&layer).map(|r| r.clone())
                         {
-                            let baked = bake_mask_from_recipe(&recipe, &self.interner);
+                            let baked = bake_mask_from_recipe(&recipe, &self.interner).unwrap();
                             self.push_mask_update(layer, baked);
                             println!(
                                 "Re-baked mask layer {} due to change in {:?}",
@@ -555,27 +579,30 @@ impl AssetManager {
     }
 }
 
-fn bake_mask_from_recipe(recipe: &MaskRecipe, interner: &Arc<ThreadedRodeo>) -> GrayImage {
+fn bake_mask_from_recipe(
+    recipe: &MaskRecipe,
+    interner: &Arc<ThreadedRodeo>,
+) -> Result<GrayImage, ImageError> {
     let m0 = recipe.paths[0].as_ref().and_then(|p| {
-        let bytes = fs::read(&p.resolve(interner)).expect("Failed to read file");
+        let bytes = fs::read(&p.resolve(interner)).ok()?;
         image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
             .ok()
             .map(|i| i.to_luma8())
     });
     let m1 = recipe.paths[1].as_ref().and_then(|p| {
-        let bytes = fs::read(&p.resolve(interner)).expect("Failed to read file");
+        let bytes = fs::read(&p.resolve(interner)).ok()?;
         image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
             .ok()
             .map(|i| i.to_luma8())
     });
     let m2 = recipe.paths[2].as_ref().and_then(|p| {
-        let bytes = fs::read(&p.resolve(interner)).expect("Failed to read file");
+        let bytes = fs::read(&p.resolve(interner)).ok()?;
         image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
             .ok()
             .map(|i| i.to_luma8())
     });
 
-    blend_masks(&m0, &m1, &m2)
+    Ok(blend_masks(&m0, &m1, &m2))
 }
 
 /// Quantize the 3 masks to be 3 bits 3 bits 2 bits

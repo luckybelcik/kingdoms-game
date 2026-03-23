@@ -59,6 +59,16 @@ impl Renderer {
         self.depth_texture_view = self.gpu.create_depth_texture(width, height);
     }
 
+    pub fn reinit_scene(&mut self, asset_manager: &AssetManager) {
+        self.scene = Scene::new(
+            &self.gpu.device,
+            &self.gpu.queue,
+            self.gpu.surface_format,
+            &self.chunk_ssbo.get_buffer(),
+            asset_manager,
+        );
+    }
+
     pub fn update_assets(&mut self, asset_manager: &mut AssetManager) {
         self.scene
             .texture_manager

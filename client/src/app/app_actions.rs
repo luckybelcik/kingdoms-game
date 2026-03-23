@@ -7,6 +7,7 @@ pub enum AppKeybindableActions {
     ToggleLineRendering,
     ToggleDebugUI,
     ForceCrash,
+    ReloadAssets,
 }
 
 impl AppKeybindableActions {
@@ -17,6 +18,7 @@ impl AppKeybindableActions {
             AppKeybindableActions::ToggleLineRendering => true,
             AppKeybindableActions::ToggleTextureRendering => true,
             AppKeybindableActions::ForceCrash => true,
+            AppKeybindableActions::ReloadAssets => true,
         }
     }
 

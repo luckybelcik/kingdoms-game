@@ -60,7 +60,7 @@ impl App {
             window: None,
             renderer: None,
             // we only get the manager and ignore timings
-            asset_manager: Some(AssetManager::init(None, true, false).0),
+            asset_manager: Some(AssetManager::init(None, true, false).unwrap().0),
             gui_state: None,
             pressed_keys: Default::default(),
             app_info: Default::default(),
@@ -144,8 +144,8 @@ impl ApplicationHandler for App {
     ) {
         self.app_info.tick += 1;
 
-        let total: f32 = (self.app_info.delta_history.iter().sum::<u16>()) as f32;
-        let avg_delta_time = total / (self.app_info.delta_history.len() as f32);
+        let total: f64 = (self.app_info.delta_history.iter().sum::<u64>()) as f64;
+        let avg_delta_time = total / (self.app_info.delta_history.len() as f64);
 
         if self.app_info.tick.is_multiple_of(10) {
             let now = Instant::now();
@@ -153,7 +153,7 @@ impl ApplicationHandler for App {
                 let delta_time: Duration = now - last;
                 self.app_info
                     .delta_history
-                    .push_back(delta_time.as_millis() as u16);
+                    .push_back(delta_time.as_millis() as u64);
 
                 if self.app_info.delta_history.len() > 512 {
                     self.app_info.delta_history.pop_front();
@@ -162,7 +162,7 @@ impl ApplicationHandler for App {
                 if avg_delta_time != 0.0 {
                     self.app_info
                         .avg_fps_history
-                        .push_back((1000.0 / avg_delta_time) as u16);
+                        .push_back((1000.0 / avg_delta_time) as u64);
 
                     if self.app_info.avg_fps_history.len() > 128 {
                         self.app_info.avg_fps_history.pop_front();
@@ -273,6 +273,16 @@ impl App {
             AppKeybindableActions::ForceCrash => {
                 panic!("Forced crash!");
             }
+            AppKeybindableActions::ReloadAssets => {
+                let result = AssetManager::init(None, true, false);
+                if let Ok((asset_manager, _)) = result {
+                    self.asset_manager = Some(asset_manager);
+                    self.renderer
+                        .as_mut()
+                        .unwrap()
+                        .reinit_scene(self.asset_manager.as_ref().unwrap());
+                }
+            }
         }
     }
 
@@ -292,7 +302,7 @@ impl App {
         }
     }
 
-    fn handle_redraw(&mut self, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
+    fn handle_redraw(&mut self, avg_delta_time: f64, highest_fps: u64, lowest_fps: u64) {
         const TICK_RATE: u32 = 20;
         const FIXED_TIMESTEP: f64 = 1.0 / TICK_RATE as f64;
 
@@ -378,6 +388,15 @@ impl App {
                             }
                         });
                     }
+                    PendingUpdate::ManagerReload => {
+                        let result = AssetManager::init(None, true, false);
+                        if let Ok((asset_manager, _)) = result {
+                            self.asset_manager = Some(asset_manager);
+                            renderer.reinit_scene(self.asset_manager.as_ref().unwrap());
+                        } else {
+                            println!("Failed to reload asset manager: {}", result.err().unwrap());
+                        }
+                    }
                 }
             }
         }
@@ -444,7 +463,7 @@ impl App {
     }
 }
 
-fn draw_ui(app: &mut App, avg_delta_time: f32, highest_fps: u16, lowest_fps: u16) {
+fn draw_ui(app: &mut App, avg_delta_time: f64, highest_fps: u64, lowest_fps: u64) {
     let mut selected_block_string = "";
     let mut selected_block_id = 0;
 
