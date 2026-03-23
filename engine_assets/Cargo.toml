@@ -12,6 +12,7 @@ toml = { workspace = true }
 serde = { workspace = true }
 bytemuck = { workspace = true }
 rayon = { workspace = true }
-notify = "8.2.0"
-dashmap = { version = "6.1.0", features = ["rayon"] }
-walkdir = "2.5.0"
+notify = { workspace = true }
+dashmap = { workspace = true }
+walkdir = { workspace = true }
+lasso = { workspace = true }

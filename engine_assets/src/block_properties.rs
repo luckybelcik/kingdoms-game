@@ -1,5 +1,6 @@
 use crate::manifest::BlockDefinition;
 
+#[derive(Debug)]
 pub struct BlockProperties {
     pub display_name: String,
 }

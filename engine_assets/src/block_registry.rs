@@ -1,5 +1,6 @@
-use std::{collections::BTreeSet, path::PathBuf};
+use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
 
+use lasso::ThreadedRodeo;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rustc_hash::FxHashMap;
 use walkdir::WalkDir;
@@ -7,13 +8,14 @@ use walkdir::WalkDir;
 use crate::{
     block_properties::BlockProperties,
     colormap_registry::ColormapRegistry,
+    engine_path::EnginePath,
     manifest::{BlockDefinition, BlockManifest, FaceConfigWithVariants, FacesOptions},
     misc::MaskRecipe,
     projects::Project,
     rendering::{TextureMetadata, pack_colormap_ids, pack_sources},
 };
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct BlockRegistry {
     properties: Vec<BlockProperties>,
     name_to_id: FxHashMap<String, u16>,
@@ -24,6 +26,7 @@ impl BlockRegistry {
     pub fn init(
         projects: Vec<Project>,
         include_assets: bool,
+        interner: &Arc<ThreadedRodeo>,
     ) -> (
         Vec<Project>,
         BlockRegistry,
@@ -119,19 +122,31 @@ impl BlockRegistry {
                             let block_path = project.path.join("textures/blocks");
 
                             if let Some(c) = &face_config.colormap0 {
-                                colormap_registry.get_or_register_asset(&c.map, &project.path);
+                                colormap_registry.get_or_register_asset(
+                                    &c.map,
+                                    &project.path,
+                                    &interner,
+                                );
                                 colormap_queue.insert(
                                     project.path.join("textures/colormaps").join(&c.map.clone()),
                                 );
                             }
                             if let Some(c) = &face_config.colormap1 {
-                                colormap_registry.get_or_register_asset(&c.map, &project.path);
+                                colormap_registry.get_or_register_asset(
+                                    &c.map,
+                                    &project.path,
+                                    &interner,
+                                );
                                 colormap_queue.insert(
                                     project.path.join("textures/colormaps").join(&c.map.clone()),
                                 );
                             }
                             if let Some(c) = &face_config.colormap2 {
-                                colormap_registry.get_or_register_asset(&c.map, &project.path);
+                                colormap_registry.get_or_register_asset(
+                                    &c.map,
+                                    &project.path,
+                                    &interner,
+                                );
                                 colormap_queue.insert(
                                     project.path.join("textures/colormaps").join(&c.map.clone()),
                                 );
@@ -163,15 +178,24 @@ impl BlockRegistry {
                                 {
                                     let recipe = MaskRecipe {
                                         paths: [
-                                            face.colormap0_mask
-                                                .as_ref()
-                                                .map(|c| block_path.join(&c)),
-                                            face.colormap1_mask
-                                                .as_ref()
-                                                .map(|c| block_path.join(&c)),
-                                            face.colormap2_mask
-                                                .as_ref()
-                                                .map(|c| block_path.join(&c)),
+                                            face.colormap0_mask.as_ref().map(|c| {
+                                                EnginePath::from_path(
+                                                    &block_path.join(&c),
+                                                    interner,
+                                                )
+                                            }),
+                                            face.colormap1_mask.as_ref().map(|c| {
+                                                EnginePath::from_path(
+                                                    &block_path.join(&c),
+                                                    interner,
+                                                )
+                                            }),
+                                            face.colormap2_mask.as_ref().map(|c| {
+                                                EnginePath::from_path(
+                                                    &block_path.join(&c),
+                                                    interner,
+                                                )
+                                            }),
                                         ],
                                     };
 
@@ -225,6 +249,7 @@ impl BlockRegistry {
                                         &face_config,
                                         &colormap_registry,
                                         &project.path,
+                                        &interner,
                                     ),
                                     mask_atlas_id: colormap_mask_ids[0],
                                     packed_source_ids_and_flipbits: pack_sources(&face_config),
@@ -245,6 +270,7 @@ impl BlockRegistry {
                                         &face_config,
                                         &colormap_registry,
                                         &project.path,
+                                        &interner,
                                     ),
                                     mask_atlas_id: variant_data,
                                     packed_source_ids_and_flipbits: pack_sources(&face_config),
@@ -263,8 +289,6 @@ impl BlockRegistry {
 
             loaded_projects.push(project);
         }
-
-        println!("Mapping table: {:?}", texture_or_variant_mapping_table);
 
         if include_assets {
             (
@@ -297,8 +321,6 @@ impl BlockRegistry {
 
     pub fn register_block(&mut self, id: String, block_definition: BlockDefinition) {
         let block_properties: BlockProperties = block_definition.into();
-
-        println!("Registered block: {}", id);
 
         self.properties.push(block_properties);
         self.id_to_name.push(id.clone());

@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-
 use image::DynamicImage;
+
+use crate::engine_path::EnginePath;
 
 pub struct AssetSlopConfig {
     pub block_padding: u32,
@@ -26,17 +26,18 @@ impl Default for AssetSlopConfig {
     }
 }
 
+#[derive(Debug)]
 pub struct TextureUpdate {
     pub layer_index: u32,
     pub data: DynamicImage,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct MaskRecipe {
-    pub paths: [Option<PathBuf>; 3],
+    pub paths: [Option<EnginePath>; 3],
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AssetManagerMemory {
     pub active_projects: usize,
 
@@ -65,6 +66,8 @@ pub struct AssetManagerMemory {
     pub mask_allocator: usize,
     pub colormap_allocator: usize,
 
+    pub lasso: usize,
+
     pub total: usize,
 }
 
@@ -89,7 +92,8 @@ impl AssetManagerMemory {
             + self.colormap_mask_variant_mapping_table
             + self.block_allocator
             + self.mask_allocator
-            + self.colormap_allocator;
+            + self.colormap_allocator
+            + self.lasso;
     }
 }
 

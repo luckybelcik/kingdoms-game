@@ -18,6 +18,7 @@ use engine_net::{
     server_packet::{DebugChunkData, DenialReason, ServerPacket},
 };
 use engine_world::chunk::Chunk;
+use lasso::ThreadedRodeo;
 use nalgebra_glm::{IVec3, distance};
 use rustc_hash::{FxHashMap, FxHashSet};
 use shared_utils::raycast::cast_ray;
@@ -37,6 +38,7 @@ pub struct Server {
     pub tick: u128,
     chunkgen_job_queue: Arc<(Mutex<BinaryHeap<PrioritizedJob>>, Condvar)>,
     generated_chunk_receiver: Receiver<GeneratedChunk>,
+    interner: Arc<ThreadedRodeo>,
 }
 
 impl Server {
@@ -52,7 +54,9 @@ impl Server {
             projects_to_load.push(proj);
         }
 
-        let block_registry = BlockRegistry::init(projects_to_load, false).1;
+        let interner = Arc::new(ThreadedRodeo::new());
+
+        let block_registry = BlockRegistry::init(projects_to_load, false, &interner).1;
         let block_registry_arc = Arc::new(block_registry);
         let block_registry_arc_clone = block_registry_arc.clone();
 
@@ -94,6 +98,7 @@ impl Server {
             tick: 0,
             chunkgen_job_queue: queue,
             generated_chunk_receiver,
+            interner,
         }
     }
 

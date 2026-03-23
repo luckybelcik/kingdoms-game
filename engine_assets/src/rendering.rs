@@ -1,4 +1,6 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
+
+use lasso::ThreadedRodeo;
 
 use crate::{
     colormap_registry::{ColormapRegistry, string_to_source_id},
@@ -23,10 +25,11 @@ pub fn pack_colormap_ids(
     config: &FaceConfigWithVariants,
     registry: &ColormapRegistry,
     ns_path: &Path,
+    interner: &Arc<ThreadedRodeo>,
 ) -> u32 {
     let get_id = |conf: &Option<ColormapConfig>| {
         conf.as_ref()
-            .map(|c| registry.get_colormap_id(&c.map, ns_path))
+            .map(|c| registry.get_colormap_id(&c.map, ns_path, interner))
             .unwrap_or(0)
     };
 

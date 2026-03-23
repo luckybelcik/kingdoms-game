@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct LayerAllocator {
     next_index: u32,
     max_capacity: u32,

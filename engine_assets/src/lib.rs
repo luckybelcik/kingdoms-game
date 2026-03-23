@@ -2,13 +2,18 @@
 
 use std::{
     fs,
+    io::Cursor,
     path::PathBuf,
-    sync::mpsc::{Receiver, channel},
+    sync::{
+        Arc,
+        mpsc::{Receiver, channel},
+    },
     time::Instant,
 };
 
 use dashmap::DashMap;
 use image::{DynamicImage, GrayImage, ImageFormat};
+use lasso::{Spur, ThreadedRodeo};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
@@ -18,6 +23,7 @@ use rustc_hash::FxBuildHasher;
 use crate::{
     block_registry::BlockRegistry,
     colormap_registry::ColormapRegistry,
+    engine_path::EnginePath,
     layer_allocator::LayerAllocator,
     misc::{
         AssetManagerMemory, AssetSlopConfig, MaskRecipe, PendingUpdate, TextureUpdate, Timings,
@@ -29,25 +35,30 @@ use crate::{
 pub mod block_properties;
 pub mod block_registry;
 pub mod colormap_registry;
+pub mod engine_path;
 pub mod layer_allocator;
 pub mod manifest;
 pub mod misc;
 pub mod projects;
 pub mod rendering;
 
+pub type QoiBlob = Vec<u8>;
+pub type PngBlob = Vec<u8>;
+
+/// Active textures are stored in QOI blobs, except for the masks which are PNGs (Qoi doesn't support Luma8)
 pub struct AssetManager {
     pub active_projects: Vec<Project>,
 
-    pub active_block_textures: Option<Vec<DynamicImage>>,
-    pub active_colormap_masks_textures: Option<Vec<DynamicImage>>,
-    pub active_colormap_textures: Option<Vec<DynamicImage>>,
+    pub active_block_textures: Option<Vec<QoiBlob>>,
+    pub active_colormap_masks_textures: Option<Vec<PngBlob>>,
+    pub active_colormap_textures: Option<Vec<QoiBlob>>,
 
     pub block_registry: BlockRegistry,
     pub colormap_registry: ColormapRegistry,
 
-    pub block_path_to_layer: DashMap<PathBuf, u32, FxBuildHasher>,
-    pub colormap_path_to_layer: DashMap<PathBuf, u32, FxBuildHasher>,
-    pub colormap_mask_dependencies: DashMap<PathBuf, Vec<u32>, FxBuildHasher>,
+    pub block_path_to_layer: DashMap<EnginePath, u32, FxBuildHasher>,
+    pub colormap_path_to_layer: DashMap<EnginePath, u32, FxBuildHasher>,
+    pub colormap_mask_dependencies: DashMap<EnginePath, Vec<u32>, FxBuildHasher>,
     pub active_mask_recipes: DashMap<u32, MaskRecipe, FxBuildHasher>,
 
     pub block_upload_queue: Vec<TextureUpdate>,
@@ -65,6 +76,7 @@ pub struct AssetManager {
     pub colormap_allocator: LayerAllocator,
 
     pub watch_receiver: Receiver<notify::Result<notify::Event>>,
+    pub interner: Arc<ThreadedRodeo>,
 }
 
 impl AssetManager {
@@ -75,6 +87,7 @@ impl AssetManager {
     ) -> (AssetManager, Timings) {
         let mut project_timings = Timings::default();
         let start_time = Instant::now();
+        let interner = Arc::new(ThreadedRodeo::default());
 
         let mut projects_to_load = Vec::new();
 
@@ -111,18 +124,20 @@ impl AssetManager {
         project_timings.project_finding = start_time.elapsed().as_nanos();
         project_timings.total = project_timings.project_finding;
 
-        let mut active_block_textures = None;
-        let mut active_colormap_masks_textures = None;
-        let mut active_colormap_textures = None;
+        let mut active_block_textures: Option<Vec<QoiBlob>> = None;
+        let mut active_colormap_masks_textures: Option<Vec<QoiBlob>> = None;
+        let mut active_colormap_textures: Option<Vec<QoiBlob>> = None;
         if store_textures {
             active_block_textures = Some(Vec::new());
             active_colormap_masks_textures = Some(Vec::new());
             active_colormap_textures = Some(Vec::new());
         }
 
-        let block_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
-        let colormap_path_to_layer = DashMap::with_hasher(FxBuildHasher::default());
-        let mask_dependencies: DashMap<PathBuf, Vec<u32>, FxBuildHasher> =
+        let block_path_to_layer: DashMap<EnginePath, u32, FxBuildHasher> =
+            DashMap::with_hasher(FxBuildHasher::default());
+        let colormap_path_to_layer: DashMap<EnginePath, u32, FxBuildHasher> =
+            DashMap::with_hasher(FxBuildHasher::default());
+        let colormap_mask_dependencies: DashMap<EnginePath, Vec<u32>, FxBuildHasher> =
             DashMap::with_hasher(FxBuildHasher::default());
         let active_mask_recipes: DashMap<u32, MaskRecipe, FxBuildHasher> =
             DashMap::with_hasher(FxBuildHasher::default());
@@ -138,7 +153,7 @@ impl AssetManager {
             texture_variant_mapping_table,
             colormap_mask_variant_mapping_table,
             colormap_registry,
-        ) = BlockRegistry::init(projects_to_load, true);
+        ) = BlockRegistry::init(projects_to_load, true, &interner);
 
         project_timings.block_registry_init =
             start_time.elapsed().as_nanos() - project_timings.total;
@@ -160,7 +175,8 @@ impl AssetManager {
                                     layer_index: i as u32,
                                     data: image,
                                 };
-                                block_path_to_layer.insert(p, i as u32);
+                                block_path_to_layer
+                                    .insert(EnginePath::from_path(&p, &interner), i as u32);
                                 update
                             })
                             .collect::<Vec<_>>()
@@ -180,7 +196,8 @@ impl AssetManager {
                                     layer_index: i as u32,
                                     data: image,
                                 };
-                                colormap_path_to_layer.insert(p, i as u32);
+                                colormap_path_to_layer
+                                    .insert(EnginePath::from_path(&p, &interner), i as u32);
                                 update
                             })
                             .collect::<Vec<_>>()
@@ -193,9 +210,9 @@ impl AssetManager {
                     .enumerate()
                     .map(|(i, recipe)| {
                         let layer_idx = i as u32;
-                        for path in recipe.paths.iter().flatten() {
-                            mask_dependencies
-                                .entry(path.clone())
+                        for ep in recipe.paths.iter().flatten() {
+                            colormap_mask_dependencies
+                                .entry(ep.clone())
                                 .or_default()
                                 .push(layer_idx);
                         }
@@ -203,7 +220,9 @@ impl AssetManager {
 
                         TextureUpdate {
                             layer_index: layer_idx,
-                            data: DynamicImage::ImageLuma8(bake_mask_from_recipe(&recipe)),
+                            data: DynamicImage::ImageLuma8(bake_mask_from_recipe(
+                                &recipe, &interner,
+                            )),
                         }
                     })
                     .collect::<Vec<_>>()
@@ -212,19 +231,31 @@ impl AssetManager {
 
         if let Some(active_block_textures) = &mut active_block_textures {
             for block in &block_upload_queue {
-                active_block_textures.push(block.data.clone());
+                let mut buffer = Cursor::new(Vec::new());
+                block.data.write_to(&mut buffer, ImageFormat::Qoi).unwrap();
+                active_block_textures.push(buffer.into_inner());
             }
         }
 
         if let Some(active_colormap_masks_textures) = &mut active_colormap_masks_textures {
             for colormap_mask in &mask_upload_queue {
-                active_colormap_masks_textures.push(colormap_mask.data.clone());
+                let mut buffer = Cursor::new(Vec::new());
+                colormap_mask
+                    .data
+                    .write_to(&mut buffer, ImageFormat::Png) // png because qoi doesnt support luma8
+                    .unwrap();
+                active_colormap_masks_textures.push(buffer.into_inner());
             }
         }
 
         if let Some(active_colormap_textures) = &mut active_colormap_textures {
             for colormap in &colormap_upload_queue {
-                active_colormap_textures.push(colormap.data.clone());
+                let mut buffer = Cursor::new(Vec::new());
+                colormap
+                    .data
+                    .write_to(&mut buffer, ImageFormat::Qoi)
+                    .unwrap();
+                active_colormap_textures.push(buffer.into_inner());
             }
         }
 
@@ -260,10 +291,6 @@ impl AssetManager {
         project_timings.watcher_setup = start_time.elapsed().as_nanos() - project_timings.total;
         project_timings.total += project_timings.watcher_setup;
 
-        let time_elapsed = start_time.elapsed().as_millis();
-        println!("Initialization time: {:?}ms", time_elapsed);
-        println!("Block count: {:?}", block_registry.get_block_count());
-
         (
             AssetManager {
                 active_projects: loaded_projects,
@@ -277,7 +304,7 @@ impl AssetManager {
 
                 block_path_to_layer,
                 colormap_path_to_layer,
-                colormap_mask_dependencies: mask_dependencies,
+                colormap_mask_dependencies,
                 active_mask_recipes,
 
                 block_upload_queue,
@@ -295,6 +322,7 @@ impl AssetManager {
                 colormap_allocator,
 
                 watch_receiver: rx,
+                interner,
             },
             project_timings,
         )
@@ -314,7 +342,11 @@ impl AssetManager {
                     println!("Hot-reloaded shader: {:?}", path.file_name().unwrap());
                 }
 
-                if let Some(layer) = self.block_path_to_layer.get(&path).map(|r| *r) {
+                if let Some(layer) = self
+                    .block_path_to_layer
+                    .get(&EnginePath::from_path(&path, &self.interner))
+                    .map(|r| *r)
+                {
                     if let Ok(img) = image::open(&path) {
                         self.push_block_update(layer, img);
                         println!("Hot-reloaded block: {:?}", path.file_name().unwrap());
@@ -323,7 +355,7 @@ impl AssetManager {
 
                 let layers = self
                     .colormap_mask_dependencies
-                    .get(&path)
+                    .get(&EnginePath::from_path(&path, &self.interner))
                     .map(|r| r.clone());
 
                 if let Some(layers) = layers {
@@ -331,7 +363,7 @@ impl AssetManager {
                         if let Some(recipe) =
                             self.active_mask_recipes.get(&layer).map(|r| r.clone())
                         {
-                            let baked = bake_mask_from_recipe(&recipe);
+                            let baked = bake_mask_from_recipe(&recipe, &self.interner);
                             self.push_mask_update(layer, baked);
                             println!(
                                 "Re-baked mask layer {} due to change in {:?}",
@@ -342,7 +374,11 @@ impl AssetManager {
                     }
                 }
 
-                if let Some(layer) = self.colormap_path_to_layer.get(&path).map(|r| *r) {
+                if let Some(layer) = self
+                    .colormap_path_to_layer
+                    .get(&EnginePath::from_path(&path, &self.interner))
+                    .map(|r| *r)
+                {
                     if let Ok(img) = image::open(&path) {
                         println!("Hot-reloaded colormap: {:?}", path.file_name().unwrap());
                         self.push_colormap_update(layer, img);
@@ -376,12 +412,16 @@ impl AssetManager {
             .find(|u| u.layer_index == layer)
         {
             if let Some(textures) = &mut self.active_block_textures {
-                textures[layer as usize] = data.clone();
+                let mut buffer = Cursor::new(Vec::new());
+                data.write_to(&mut buffer, ImageFormat::Qoi).unwrap();
+                textures[layer as usize] = buffer.into_inner();
             };
             existing.data = data;
         } else {
             if let Some(textures) = &mut self.active_block_textures {
-                textures[layer as usize] = data.clone();
+                let mut buffer = Cursor::new(Vec::new());
+                data.write_to(&mut buffer, ImageFormat::Qoi).unwrap();
+                textures[layer as usize] = buffer.into_inner();
             };
             self.block_upload_queue.push(TextureUpdate {
                 layer_index: layer,
@@ -399,12 +439,20 @@ impl AssetManager {
             .find(|u| u.layer_index == layer)
         {
             if let Some(colormap_masks) = &mut self.active_colormap_masks_textures {
-                colormap_masks[layer as usize] = dynamic_data.clone();
+                let mut buffer = Cursor::new(Vec::new());
+                dynamic_data
+                    .write_to(&mut buffer, ImageFormat::Png)
+                    .unwrap();
+                colormap_masks[layer as usize] = buffer.into_inner();
             };
             existing.data = dynamic_data;
         } else {
             if let Some(colormap_masks) = &mut self.active_colormap_masks_textures {
-                colormap_masks[layer as usize] = dynamic_data.clone();
+                let mut buffer = Cursor::new(Vec::new());
+                dynamic_data
+                    .write_to(&mut buffer, ImageFormat::Png)
+                    .unwrap();
+                colormap_masks[layer as usize] = buffer.into_inner();
             };
             self.colormap_mask_upload_queue.push(TextureUpdate {
                 layer_index: layer,
@@ -420,12 +468,16 @@ impl AssetManager {
             .find(|u| u.layer_index == layer)
         {
             if let Some(colormaps) = &mut self.active_colormap_textures {
-                colormaps[layer as usize] = data.clone();
+                let mut buffer = Cursor::new(Vec::new());
+                data.write_to(&mut buffer, ImageFormat::Qoi).unwrap();
+                colormaps[layer as usize] = buffer.into_inner();
             };
             existing.data = data;
         } else {
             if let Some(colormaps) = &mut self.active_colormap_textures {
-                colormaps[layer as usize] = data.clone();
+                let mut buffer = Cursor::new(Vec::new());
+                data.write_to(&mut buffer, ImageFormat::Qoi).unwrap();
+                colormaps[layer as usize] = buffer.into_inner();
             };
             self.colormap_upload_queue.push(TextureUpdate {
                 layer_index: layer,
@@ -442,20 +494,20 @@ impl AssetManager {
         }
 
         if let Some(blocks) = &self.active_block_textures {
-            for image in blocks {
-                memory.active_block_textures += (image.width() * image.height() * 4) as usize;
+            for qoi_blob in blocks {
+                memory.active_block_textures += qoi_blob.len();
             }
         }
 
         if let Some(colormaps) = &self.active_colormap_textures {
-            for image in colormaps {
-                memory.active_colormap_textures += (image.width() * image.height() * 4) as usize;
+            for qoi_blob in colormaps {
+                memory.active_colormap_textures += qoi_blob.len();
             }
         }
 
         if let Some(colormap_masks) = &self.active_colormap_masks_textures {
-            for image in colormap_masks {
-                memory.active_colormap_masks_textures += (image.width() * image.height()) as usize;
+            for png_blob in colormap_masks {
+                memory.active_colormap_masks_textures += png_blob.len();
             }
         }
 
@@ -463,23 +515,19 @@ impl AssetManager {
         memory.colormap_registry = self.colormap_registry.estimate_heap();
 
         // estimation, guys. we don't really know.
-        memory.block_path_to_layer = estimate_dashmap_path_u32(&self.block_path_to_layer);
-        memory.colormap_path_to_layer = estimate_dashmap_path_u32(&self.colormap_path_to_layer);
+        memory.block_path_to_layer = estimate_dashmap_spur_u32(&self.block_path_to_layer);
+        memory.colormap_path_to_layer = estimate_dashmap_spur_u32(&self.colormap_path_to_layer);
 
         for entry in self.colormap_mask_dependencies.iter() {
-            memory.mask_dependencies += size_of::<PathBuf>() + entry.key().capacity();
+            memory.mask_dependencies += size_of::<Spur>();
             memory.mask_dependencies +=
                 size_of::<Vec<u32>>() + (entry.value().capacity() * size_of::<u32>());
         }
 
         for entry in self.active_mask_recipes.iter() {
             memory.active_mask_recipes += size_of::<u32>();
-            for option_path in &entry.value().paths {
-                if let Some(path) = option_path {
-                    memory.active_mask_recipes += size_of::<PathBuf>() + path.capacity();
-                } else {
-                    memory.active_mask_recipes += size_of::<Option<PathBuf>>();
-                }
+            for _ in &entry.value().paths {
+                memory.active_mask_recipes += size_of::<Option<EnginePath>>();
             }
         }
 
@@ -499,6 +547,8 @@ impl AssetManager {
         memory.mask_allocator += self.colormap_mask_allocator.estimate_heap();
         memory.colormap_allocator += self.colormap_allocator.estimate_heap();
 
+        memory.lasso += self.interner.current_memory_usage();
+
         memory.resolve_total();
         memory.total += size_of::<Self>();
 
@@ -506,21 +556,21 @@ impl AssetManager {
     }
 }
 
-fn bake_mask_from_recipe(recipe: &MaskRecipe) -> GrayImage {
+fn bake_mask_from_recipe(recipe: &MaskRecipe, interner: &Arc<ThreadedRodeo>) -> GrayImage {
     let m0 = recipe.paths[0].as_ref().and_then(|p| {
-        let bytes = fs::read(&p).expect("Failed to read file");
+        let bytes = fs::read(&p.resolve(interner)).expect("Failed to read file");
         image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
             .ok()
             .map(|i| i.to_luma8())
     });
     let m1 = recipe.paths[1].as_ref().and_then(|p| {
-        let bytes = fs::read(&p).expect("Failed to read file");
+        let bytes = fs::read(&p.resolve(interner)).expect("Failed to read file");
         image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
             .ok()
             .map(|i| i.to_luma8())
     });
     let m2 = recipe.paths[2].as_ref().and_then(|p| {
-        let bytes = fs::read(&p).expect("Failed to read file");
+        let bytes = fs::read(&p.resolve(interner)).expect("Failed to read file");
         image::load_from_memory_with_format(&bytes, ImageFormat::Qoi)
             .ok()
             .map(|i| i.to_luma8())
@@ -559,10 +609,6 @@ pub fn blend_masks(
     out
 }
 
-fn estimate_dashmap_path_u32(map: &DashMap<PathBuf, u32, FxBuildHasher>) -> usize {
-    let mut sum = 0;
-    for entry in map.iter() {
-        sum += entry.key().capacity() + size_of::<PathBuf>() + size_of::<u32>();
-    }
-    sum
+fn estimate_dashmap_spur_u32(map: &DashMap<EnginePath, u32, FxBuildHasher>) -> usize {
+    (size_of::<EnginePath>() + size_of::<u32>()) * map.len()
 }
