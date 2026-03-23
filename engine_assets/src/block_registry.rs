@@ -15,6 +15,19 @@ use crate::{
     rendering::{TextureMetadata, pack_colormap_ids, pack_sources},
 };
 
+pub struct BlockRegistryContext {
+    pub loaded_projects: Vec<Project>,
+    pub block_registry: BlockRegistry,
+    pub block_texture_paths: Vec<PathBuf>,
+    pub block_colormap_masks: Vec<MaskRecipe>,
+    pub colormap_texture_paths: BTreeSet<PathBuf>,
+    pub texture_or_variant_mapping_table: Vec<u32>,
+    pub metadata_table: Vec<TextureMetadata>,
+    pub block_variant_mapping_table: Vec<u32>,
+    pub colormap_mask_variant_mapping_table: Vec<u32>,
+    pub colormap_registry: Option<ColormapRegistry>,
+}
+
 #[derive(Default, Debug)]
 pub struct BlockRegistry {
     properties: Vec<BlockProperties>,
@@ -27,18 +40,7 @@ impl BlockRegistry {
         projects: Vec<Project>,
         include_assets: bool,
         interner: &Arc<ThreadedRodeo>,
-    ) -> (
-        Vec<Project>,
-        BlockRegistry,
-        Vec<PathBuf>,
-        Vec<MaskRecipe>,
-        BTreeSet<PathBuf>,
-        Vec<u32>,
-        Vec<TextureMetadata>,
-        Vec<u32>,
-        Vec<u32>,
-        Option<ColormapRegistry>,
-    ) {
+    ) -> BlockRegistryContext {
         let parsed_projects: Vec<_> = projects
             .into_par_iter()
             .filter_map(|project| {
@@ -67,18 +69,18 @@ impl BlockRegistry {
             .collect();
 
         let mut loaded_projects = Vec::new();
-        let mut registry = BlockRegistry::default();
-        let mut block_texture_queue = Vec::new();
-        let mut mask_recipes_queue = Vec::new();
-        let mut colormap_queue = BTreeSet::default();
+        let mut block_registry = BlockRegistry::default();
+        let mut block_texture_paths = Vec::new();
+        let mut block_colormap_masks = Vec::new();
+        let mut colormap_texture_paths = BTreeSet::default();
         let mut texture_to_id = FxHashMap::default();
         let mut mask_to_id: FxHashMap<MaskRecipe, u32> = FxHashMap::default();
         // facedir + blockid -> textureid OR variant data
         let mut texture_or_variant_mapping_table = Vec::new();
         // textureid -> texture metadata
-        let mut metadata_mapping_table = Vec::new();
+        let mut metadata_table = Vec::new();
         // variant data -> texture index to use
-        let mut texture_variant_mapping_table = Vec::new();
+        let mut block_variant_mapping_table = Vec::new();
         // variant data -> colormap mask index to use
         let mut colormap_mask_variant_mapping_table = Vec::new();
         let mut colormap_registry = ColormapRegistry::default(); // technically obsolete if not including assets but whatever
@@ -86,7 +88,7 @@ impl BlockRegistry {
         // breathe air
         // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_or_variant_mapping_table.extend_from_slice(&[0; 6]);
-        registry.register_block(
+        block_registry.register_block(
             "native:air".to_string(),
             BlockDefinition {
                 id: "naive:air".to_string(),
@@ -127,7 +129,7 @@ impl BlockRegistry {
                                     &project.path,
                                     &interner,
                                 );
-                                colormap_queue.insert(
+                                colormap_texture_paths.insert(
                                     project.path.join("textures/colormaps").join(&c.map.clone()),
                                 );
                             }
@@ -137,7 +139,7 @@ impl BlockRegistry {
                                     &project.path,
                                     &interner,
                                 );
-                                colormap_queue.insert(
+                                colormap_texture_paths.insert(
                                     project.path.join("textures/colormaps").join(&c.map.clone()),
                                 );
                             }
@@ -147,7 +149,7 @@ impl BlockRegistry {
                                     &project.path,
                                     &interner,
                                 );
-                                colormap_queue.insert(
+                                colormap_texture_paths.insert(
                                     project.path.join("textures/colormaps").join(&c.map.clone()),
                                 );
                             }
@@ -160,8 +162,8 @@ impl BlockRegistry {
                                 let texture_id = *texture_to_id
                                     .entry(full_tex_path.clone())
                                     .or_insert_with(|| {
-                                        let idx = block_texture_queue.len() as u32;
-                                        block_texture_queue.push(full_tex_path.clone());
+                                        let idx = block_texture_paths.len() as u32;
+                                        block_texture_paths.push(full_tex_path.clone());
                                         idx
                                     });
 
@@ -200,8 +202,8 @@ impl BlockRegistry {
                                     };
 
                                     *mask_to_id.entry(recipe.clone()).or_insert_with(|| {
-                                        let idx = mask_recipes_queue.len() as u32;
-                                        mask_recipes_queue.push(recipe);
+                                        let idx = block_colormap_masks.len() as u32;
+                                        block_colormap_masks.push(recipe);
                                         idx
                                     }) + 1
                                 } else {
@@ -231,11 +233,11 @@ impl BlockRegistry {
                                 texture_or_variant_mapping_table.push(texture_ids[0]);
                             } else {
                                 let texture_count = texture_id_len;
-                                let variant_table_offset = texture_variant_mapping_table.len();
+                                let variant_table_offset = block_variant_mapping_table.len();
                                 let variant_data =
                                     (texture_count as u32) << 28 | variant_table_offset as u32;
                                 texture_or_variant_mapping_table.push(variant_data);
-                                texture_variant_mapping_table.append(&mut texture_ids);
+                                block_variant_mapping_table.append(&mut texture_ids);
                             }
 
                             let fully_random_faces_bit =
@@ -279,11 +281,11 @@ impl BlockRegistry {
                                 metadata
                             };
 
-                            metadata_mapping_table.push(metadata);
+                            metadata_table.push(metadata);
                         }
                     }
 
-                    registry.register_block(full_id, block);
+                    block_registry.register_block(full_id, block);
                 }
             }
 
@@ -291,31 +293,31 @@ impl BlockRegistry {
         }
 
         if include_assets {
-            (
+            BlockRegistryContext {
                 loaded_projects,
-                registry,
-                block_texture_queue,
-                mask_recipes_queue,
-                colormap_queue,
+                block_registry,
+                block_texture_paths,
+                block_colormap_masks,
+                colormap_texture_paths,
                 texture_or_variant_mapping_table,
-                metadata_mapping_table,
-                texture_variant_mapping_table,
+                metadata_table,
+                block_variant_mapping_table,
                 colormap_mask_variant_mapping_table,
-                Some(colormap_registry),
-            )
+                colormap_registry: Some(colormap_registry),
+            }
         } else {
-            (
+            BlockRegistryContext {
                 loaded_projects,
-                registry,
-                block_texture_queue,
-                mask_recipes_queue,
-                colormap_queue,
+                block_registry,
+                block_texture_paths,
+                block_colormap_masks,
+                colormap_texture_paths,
                 texture_or_variant_mapping_table,
-                metadata_mapping_table,
-                texture_variant_mapping_table,
+                metadata_table,
+                block_variant_mapping_table,
                 colormap_mask_variant_mapping_table,
-                None,
-            )
+                colormap_registry: None,
+            }
         }
     }
 
@@ -340,15 +342,23 @@ impl BlockRegistry {
     }
 
     pub fn estimate_heap(&self) -> usize {
-        let mut sum = self.properties.capacity() * size_of::<BlockProperties>();
+        let mut sum = 0;
+
+        for block_properties in &self.properties {
+            sum += block_properties.estimate_heap();
+        }
 
         for (name, _) in &self.name_to_id {
-            sum += name.capacity() + size_of::<String>() + size_of::<u16>();
+            sum += name.capacity() + size_of::<String>() + size_of::<u16>() + 1;
         }
 
         for name in &self.id_to_name {
             sum += name.capacity() + size_of::<String>();
         }
+
+        sum += size_of::<Vec<BlockProperties>>();
+        sum += size_of::<FxHashMap<String, u16>>();
+
         sum
     }
 }

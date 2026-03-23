@@ -142,28 +142,18 @@ impl AssetManager {
         let active_mask_recipes: DashMap<u32, MaskRecipe, FxBuildHasher> =
             DashMap::with_hasher(FxBuildHasher::default());
 
-        let (
-            loaded_projects,
-            block_registry,
-            block_texture_paths,
-            block_colormap_masks,
-            colormap_texture_paths,
-            texture_mapping_table,
-            metadata_table,
-            texture_variant_mapping_table,
-            colormap_mask_variant_mapping_table,
-            colormap_registry,
-        ) = BlockRegistry::init(projects_to_load, true, &interner);
+        let block_registry_context = BlockRegistry::init(projects_to_load, true, &interner);
 
         project_timings.block_registry_init =
             start_time.elapsed().as_nanos() - project_timings.total;
         project_timings.total += project_timings.block_registry_init;
 
-        let ((block_upload_queue, colormap_upload_queue), mask_upload_queue) = rayon::join(
+        let ((block_upload_queue, colormap_upload_queue), colormap_mask_upload_queue) = rayon::join(
             || {
                 rayon::join(
                     || {
-                        block_texture_paths
+                        block_registry_context
+                            .block_texture_paths
                             .into_par_iter()
                             .enumerate()
                             .map(|(i, p)| {
@@ -182,8 +172,10 @@ impl AssetManager {
                             .collect::<Vec<_>>()
                     },
                     || {
-                        let colormap_texture_paths =
-                            colormap_texture_paths.into_par_iter().collect::<Vec<_>>();
+                        let colormap_texture_paths = block_registry_context
+                            .colormap_texture_paths
+                            .into_par_iter()
+                            .collect::<Vec<_>>();
                         colormap_texture_paths
                             .into_par_iter()
                             .enumerate()
@@ -205,7 +197,8 @@ impl AssetManager {
                 )
             },
             || {
-                block_colormap_masks
+                block_registry_context
+                    .block_colormap_masks
                     .into_par_iter()
                     .enumerate()
                     .map(|(i, recipe)| {
@@ -238,7 +231,7 @@ impl AssetManager {
         }
 
         if let Some(active_colormap_masks_textures) = &mut active_colormap_masks_textures {
-            for colormap_mask in &mask_upload_queue {
+            for colormap_mask in &colormap_mask_upload_queue {
                 let mut buffer = Cursor::new(Vec::new());
                 colormap_mask
                     .data
@@ -266,8 +259,8 @@ impl AssetManager {
 
         let block_allocator =
             LayerAllocator::new(block_upload_queue.len() as u32, config.block_padding);
-        let mask_allocator =
-            LayerAllocator::new(mask_upload_queue.len() as u32, config.mask_padding);
+        let colormap_mask_allocator =
+            LayerAllocator::new(colormap_mask_upload_queue.len() as u32, config.mask_padding);
         let colormap_allocator =
             LayerAllocator::new(colormap_upload_queue.len() as u32, config.colormap_padding);
 
@@ -275,7 +268,11 @@ impl AssetManager {
         project_timings.total += project_timings.allocator_setup;
 
         let (tx, rx) = channel();
-        let watch_paths: Vec<PathBuf> = loaded_projects.iter().map(|p| p.path.clone()).collect();
+        let watch_paths: Vec<PathBuf> = block_registry_context
+            .loaded_projects
+            .iter()
+            .map(|p| p.path.clone())
+            .collect();
 
         std::thread::spawn(move || {
             let mut watcher =
@@ -293,14 +290,14 @@ impl AssetManager {
 
         (
             AssetManager {
-                active_projects: loaded_projects,
+                active_projects: block_registry_context.loaded_projects,
 
                 active_block_textures,
                 active_colormap_masks_textures,
                 active_colormap_textures,
 
-                block_registry,
-                colormap_registry: colormap_registry.unwrap(),
+                block_registry: block_registry_context.block_registry,
+                colormap_registry: block_registry_context.colormap_registry.unwrap(),
 
                 block_path_to_layer,
                 colormap_path_to_layer,
@@ -308,17 +305,18 @@ impl AssetManager {
                 active_mask_recipes,
 
                 block_upload_queue,
-                colormap_mask_upload_queue: mask_upload_queue,
+                colormap_mask_upload_queue,
                 colormap_upload_queue,
                 pending_updates: Vec::new(),
 
-                texture_mapping_table,
-                metadata_table,
-                texture_variant_mapping_table,
-                colormap_mask_variant_mapping_table,
+                texture_mapping_table: block_registry_context.texture_or_variant_mapping_table,
+                metadata_table: block_registry_context.metadata_table,
+                texture_variant_mapping_table: block_registry_context.block_variant_mapping_table,
+                colormap_mask_variant_mapping_table: block_registry_context
+                    .colormap_mask_variant_mapping_table,
 
                 block_allocator,
-                colormap_mask_allocator: mask_allocator,
+                colormap_mask_allocator,
                 colormap_allocator,
 
                 watch_receiver: rx,
@@ -336,10 +334,11 @@ impl AssetManager {
 
             for path in event.paths {
                 if path.file_name().unwrap() == "shader.wgsl" {
-                    let shader_code = std::fs::read_to_string(&path).unwrap();
-                    self.pending_updates
-                        .push(PendingUpdate::MainShaderUpdate(shader_code));
-                    println!("Hot-reloaded shader: {:?}", path.file_name().unwrap());
+                    if let Ok(shader_code) = std::fs::read_to_string(&path) {
+                        self.pending_updates
+                            .push(PendingUpdate::MainShaderUpdate(shader_code));
+                        println!("Hot-reloaded shader: {:?}", path.file_name().unwrap());
+                    }
                 }
 
                 if let Some(layer) = self
@@ -536,7 +535,7 @@ impl AssetManager {
         memory.metadata_table = self.metadata_table.capacity() * size_of::<TextureMetadata>();
         memory.texture_variant_mapping_table =
             self.texture_variant_mapping_table.capacity() * size_of::<u32>();
-        memory.texture_mapping_table =
+        memory.colormap_mask_variant_mapping_table =
             self.colormap_mask_variant_mapping_table.capacity() * size_of::<u32>();
 
         memory.mask_upload_queue = size_of::<Vec<TextureUpdate>>();

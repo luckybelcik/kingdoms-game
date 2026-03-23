@@ -8,7 +8,10 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use engine_assets::{block_registry::BlockRegistry, projects::Project};
+use engine_assets::{
+    block_registry::{self, BlockRegistry},
+    projects::Project,
+};
 use engine_core::{chunk_pos::ChunkPos, entity_pos::EntityPos};
 use engine_net::{
     client_actions::PlayerActions,
@@ -56,7 +59,8 @@ impl Server {
 
         let interner = Arc::new(ThreadedRodeo::new());
 
-        let block_registry = BlockRegistry::init(projects_to_load, false, &interner).1;
+        let block_registry_context = BlockRegistry::init(projects_to_load, false, &interner);
+        let block_registry = block_registry_context.block_registry;
         let block_registry_arc = Arc::new(block_registry);
         let block_registry_arc_clone = block_registry_arc.clone();
 

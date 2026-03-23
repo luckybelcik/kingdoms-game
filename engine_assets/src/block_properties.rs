@@ -12,3 +12,9 @@ impl From<BlockDefinition> for BlockProperties {
         }
     }
 }
+
+impl BlockProperties {
+    pub fn estimate_heap(&self) -> usize {
+        self.display_name.capacity() + 1
+    }
+}

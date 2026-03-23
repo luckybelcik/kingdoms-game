@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use lasso::ThreadedRodeo;
 use rustc_hash::FxHashMap;
@@ -84,13 +84,6 @@ impl ColormapRegistry {
     }
 
     pub fn estimate_heap(&self) -> usize {
-        let mut sum = 0;
-        for (_, _) in &self.colormaps {
-            sum += size_of::<EnginePath>() + size_of::<u32>();
-        }
-        for _ in &self.unique_images {
-            sum += size_of::<EnginePath>();
-        }
-        sum + size_of::<HashMap<EnginePath, u32>>() + size_of::<Vec<EnginePath>>()
+        self.colormaps.capacity() * (size_of::<EnginePath>() + size_of::<u32>() + 1)
     }
 }
