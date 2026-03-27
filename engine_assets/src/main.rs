@@ -24,6 +24,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let usage = asset_manager.estimate_memory_usage();
         println!("Memory usage:");
         println!("	active_projects: {}", usage.active_projects);
+        println!(
+            "	block_id_to_manifest_path: {}",
+            usage.block_id_to_manifest_path
+        );
         println!("	active_block_textures: {}", usage.active_block_textures);
         println!(
             "	active_colormap_masks_textures: {}",

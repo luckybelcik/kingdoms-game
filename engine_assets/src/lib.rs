@@ -49,6 +49,7 @@ pub type PngBlob = Vec<u8>;
 pub struct AssetManager {
     pub active_projects: Vec<Project>,
 
+    pub block_id_to_manifest_path: Vec<EnginePath>,
     pub active_block_textures: Option<Vec<QoiBlob>>,
     pub active_colormap_masks_textures: Option<Vec<PngBlob>>,
     pub active_colormap_textures: Option<Vec<QoiBlob>>,
@@ -301,6 +302,7 @@ impl AssetManager {
         Ok((
             AssetManager {
                 active_projects: block_registry_context.loaded_projects,
+                block_id_to_manifest_path: block_registry_context.block_id_to_manifest_path,
 
                 active_block_textures,
                 active_colormap_masks_textures,
@@ -515,6 +517,9 @@ impl AssetManager {
         for project in &self.active_projects {
             memory.active_projects += project.estimate_heap();
         }
+
+        memory.block_id_to_manifest_path =
+            self.block_id_to_manifest_path.len() * std::mem::size_of::<EnginePath>();
 
         if let Some(blocks) = &self.active_block_textures {
             for qoi_blob in blocks {

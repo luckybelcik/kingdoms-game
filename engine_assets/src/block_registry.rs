@@ -26,6 +26,7 @@ pub struct BlockRegistryContext {
     pub block_variant_mapping_table: Vec<u32>,
     pub colormap_mask_variant_mapping_table: Vec<u32>,
     pub colormap_registry: Option<ColormapRegistry>,
+    pub block_id_to_manifest_path: Vec<EnginePath>,
 }
 
 #[derive(Default, Debug)]
@@ -55,12 +56,14 @@ impl BlockRegistry {
                     .map(|e| e.into_path())
                     .collect();
 
-                let manifests: Vec<BlockManifest> = paths
+                let manifests: Vec<(BlockManifest, EnginePath)> = paths
                     .into_par_iter()
                     .map(|path| {
                         let file_content =
                             std::fs::read_to_string(&path).unwrap_or_else(|_| String::new());
-                        toml::from_str(&file_content).unwrap()
+                        let manifest = toml::from_str(&file_content).unwrap();
+                        let engine_path = EnginePath::from_path(&path, interner);
+                        (manifest, engine_path)
                     })
                     .collect();
 
@@ -84,10 +87,12 @@ impl BlockRegistry {
         // variant data -> colormap mask index to use
         let mut colormap_mask_variant_mapping_table = Vec::new();
         let mut colormap_registry = ColormapRegistry::default(); // technically obsolete if not including assets but whatever
+        let mut block_id_to_manifest_path = Vec::new();
 
         // breathe air
         // basically we add an entry for air, i know there was a good reason for it but i forgot xdd
         texture_or_variant_mapping_table.extend_from_slice(&[0; 6]);
+        block_id_to_manifest_path.push(EnginePath::from_path(&PathBuf::new(), interner));
         block_registry.register_block(
             "native:air".to_string(),
             BlockDefinition {
@@ -97,7 +102,7 @@ impl BlockRegistry {
         );
 
         for (project, manifests) in parsed_projects {
-            for manifest in manifests {
+            for (manifest, manifest_path) in manifests {
                 for block in manifest.blocks {
                     let full_id = if block.id.contains(':') {
                         block.id.clone()
@@ -285,6 +290,7 @@ impl BlockRegistry {
                         }
                     }
 
+                    block_id_to_manifest_path.push(manifest_path.clone());
                     block_registry.register_block(full_id, block);
                 }
             }
@@ -304,6 +310,7 @@ impl BlockRegistry {
                 block_variant_mapping_table,
                 colormap_mask_variant_mapping_table,
                 colormap_registry: Some(colormap_registry),
+                block_id_to_manifest_path,
             }
         } else {
             BlockRegistryContext {
@@ -317,6 +324,7 @@ impl BlockRegistry {
                 block_variant_mapping_table,
                 colormap_mask_variant_mapping_table,
                 colormap_registry: None,
+                block_id_to_manifest_path,
             }
         }
     }

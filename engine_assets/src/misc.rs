@@ -41,6 +41,8 @@ pub struct MaskRecipe {
 pub struct AssetManagerMemory {
     pub active_projects: usize,
 
+    pub block_id_to_manifest_path: usize,
+
     pub active_block_textures: usize,
     pub active_colormap_masks_textures: usize,
     pub active_colormap_textures: usize,
@@ -74,6 +76,7 @@ pub struct AssetManagerMemory {
 impl AssetManagerMemory {
     pub fn resolve_total(&mut self) {
         self.total = self.active_projects
+            + self.block_id_to_manifest_path
             + self.active_block_textures
             + self.active_colormap_masks_textures
             + self.active_colormap_textures
