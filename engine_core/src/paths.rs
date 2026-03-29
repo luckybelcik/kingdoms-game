@@ -30,13 +30,13 @@ pub fn init_data_path() -> Result<(), std::io::Error> {
 
         // create files if dont exist
         if !app_key_config.exists() {
-            let default_data = fs::read("config/app_keys.json").unwrap();
-            fs::write(&app_key_config, default_data)?;
+            const DEFAULT_APP_KEYS: &[u8] = include_bytes!("../../config/app_keys.json");
+            fs::write(&app_key_config, DEFAULT_APP_KEYS)?;
         }
 
         if !client_key_config.exists() {
-            let default_data = fs::read("config/client_keys.json").unwrap();
-            fs::write(&client_key_config, default_data).unwrap();
+            const DEFAULT_CLIENT_KEYS: &[u8] = include_bytes!("../../config/client_keys.json");
+            fs::write(&client_key_config, DEFAULT_CLIENT_KEYS)?;
         }
 
         return Ok(());

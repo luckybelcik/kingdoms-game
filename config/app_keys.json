@@ -3,5 +3,6 @@
   "KeyP": "ToggleTextureRendering",
   "KeyL": "ToggleLineRendering",
   "F3": "ToggleDebugUI",
-  "F9": "ForceCrash"
+  "F9": "ForceCrash",
+  "F4": "ReloadAssets"
 }
